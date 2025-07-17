@@ -29,53 +29,81 @@ class Classe {
   }
 }
 
-class Emploi {
+class Cours {
   final int id;
-  final String datePublication;
-  final String fichier;
-  final int classeId;
+  final String matiere;
 
-  Emploi({
+  Cours({
     required this.id,
-    required this.datePublication,
-    required this.fichier,
-    required this.classeId,
+    required this.matiere,
   });
 
-  factory Emploi.fromJson(Map<String, dynamic> json) {
-    return Emploi(
+  factory Cours.fromJson(Map<String, dynamic> json) {
+    return Cours(
       id: json['id'] as int,
+      matiere: json['matiere'] as String,
+    );
+  }
+}
+
+class Exercice {
+  final int id;
+  final String contenu;
+  final String datePublication;
+  final String fichier;
+  final List<int> classeIds;
+  final int courId;
+
+  Exercice({
+    required this.id,
+    required this.contenu,
+    required this.datePublication,
+    required this.fichier,
+    required this.classeIds,
+    required this.courId,
+  });
+
+  factory Exercice.fromJson(Map<String, dynamic> json) {
+    return Exercice(
+      id: json['id'] as int,
+      contenu: json['contenu'] as String? ?? '',
       datePublication: json['datePublication'] as String? ?? '',
       fichier: json['fichier'] as String? ?? '',
-      classeId: json['classeId'] as int? ?? 0,
+      classeIds: (json['classeIds'] as List).map((e) => e as int).toList(),
+      courId: json['courId'] as int? ?? 0,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
+      'contenu': contenu,
       'datePublication': datePublication,
       'fichier': fichier,
-      'classeId': classeId,
+      'classeIds': classeIds,
+      'courId': courId,
     };
   }
 }
 
-class EmploisPage extends StatefulWidget {
-  const EmploisPage({Key? key}) : super(key: key);
+class ExercicesPage extends StatefulWidget {
+  const ExercicesPage({Key? key}) : super(key: key);
 
   @override
-  State<EmploisPage> createState() => _EmploisPageState();
+  State<ExercicesPage> createState() => _ExercicesPageState();
 }
 
-class _EmploisPageState extends State<EmploisPage> {
-  static const String _emploisApiUrl = 'http://localhost:8004/api/emplois';
+class _ExercicesPageState extends State<ExercicesPage> {
+  static const String _exercicesApiUrl = 'http://localhost:8004/api/exercices';
   static const String _classesApiUrl = 'http://localhost:8004/api/classes';
+  static const String _coursApiUrl = 'http://localhost:8004/api/cours';
   static const int _maxFileSize = 25 * 1024 * 1024;
 
-  final List<Emploi> _emplois = [];
+  final List<Exercice> _exercices = [];
   final List<Classe> _classes = [];
+  final List<Cours> _cours = [];
   bool _loading = true;
   bool _loadingClasses = true;
+  bool _loadingCours = true;
 
   @override
   void initState() {
@@ -85,22 +113,22 @@ class _EmploisPageState extends State<EmploisPage> {
 
   Future<void> _fetchData() async {
     setState(() => _loading = true);
-    await Future.wait([_fetchEmplois(), _fetchClasses()]);
+    await Future.wait([_fetchExercices(), _fetchClasses(), _fetchCours()]);
     setState(() => _loading = false);
   }
 
-  Future<void> _fetchEmplois() async {
+  Future<void> _fetchExercices() async {
     try {
-      final response = await http.get(Uri.parse(_emploisApiUrl));
+      final response = await http.get(Uri.parse(_exercicesApiUrl));
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body) as List<dynamic>;
         setState(() {
-          _emplois
+          _exercices
             ..clear()
-            ..addAll(data.map((e) => Emploi.fromJson(e as Map<String, dynamic>)));
+            ..addAll(data.map((e) => Exercice.fromJson(e as Map<String, dynamic>)));
         });
       } else {
-        _showErrorSnackbar('Erreur lors de la récupération des emplois: ${response.statusCode}');
+        _showErrorSnackbar('Erreur lors de la récupération des exercices: ${response.statusCode}');
       }
     } catch (e) {
       _showErrorSnackbar('Erreur réseau ou serveur: ${e.toString()}');
@@ -129,49 +157,71 @@ class _EmploisPageState extends State<EmploisPage> {
     }
   }
 
-  Future<void> _createEmploi(Map<String, dynamic> body) async {
+  Future<void> _fetchCours() async {
+    setState(() => _loadingCours = true);
+    try {
+      final response = await http.get(Uri.parse(_coursApiUrl));
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body) as List<dynamic>;
+        setState(() {
+          _cours
+            ..clear()
+            ..addAll(data.map((e) => Cours.fromJson(e as Map<String, dynamic>)));
+          _loadingCours = false;
+        });
+      } else {
+        setState(() => _loadingCours = false);
+        _showErrorSnackbar('Erreur lors de la récupération des cours: ${response.statusCode}');
+      }
+    } catch (e) {
+      setState(() => _loadingCours = false);
+      _showErrorSnackbar('Erreur réseau ou serveur: ${e.toString()}');
+    }
+  }
+
+  Future<void> _createExercice(Map<String, dynamic> body) async {
     try {
       final response = await http.post(
-        Uri.parse(_emploisApiUrl),
+        Uri.parse(_exercicesApiUrl),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(body),
       );
 
       if (response.statusCode == 201 || response.statusCode == 200) {
-        _fetchEmplois();
-        _showSuccessSnackbar('Ajouté avec succès');
+        _fetchExercices();
+        _showSuccessSnackbar('Exercice ajouté avec succès');
       } else {
-        throw Exception('Erreur création emploi: ${response.statusCode} - ${response.body}');
+        throw Exception('Erreur création exercice: ${response.statusCode} - ${response.body}');
       }
     } catch (e) {
       _showErrorSnackbar('Erreur lors de la création: ${e.toString()}');
     }
   }
 
-  Future<void> _updateEmploi(int id, Map<String, dynamic> body) async {
+  Future<void> _updateExercice(int id, Map<String, dynamic> body) async {
     try {
       final response = await http.put(
-        Uri.parse('$_emploisApiUrl/$id'),
+        Uri.parse('$_exercicesApiUrl/$id'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(body),
       );
       
       if (response.statusCode == 200) {
-        _fetchEmplois();
-        _showSuccessSnackbar('Modifié avec succès');
+        _fetchExercices();
+        _showSuccessSnackbar('Exercice modifié avec succès');
       } else {
-        throw Exception('Erreur mise à jour emploi: ${response.statusCode}');
+        throw Exception('Erreur mise à jour exercice: ${response.statusCode}');
       }
     } catch (e) {
       _showErrorSnackbar('Erreur lors de la mise à jour: ${e.toString()}');
     }
   }
 
-  Future<void> _deleteEmploi(int id) async {
+  Future<void> _deleteExercice(int id) async {
     try {
-      final response = await http.delete(Uri.parse('$_emploisApiUrl/$id'));
+      final response = await http.delete(Uri.parse('$_exercicesApiUrl/$id'));
       if (response.statusCode == 200 || response.statusCode == 204) {
-        _fetchEmplois();
+        _fetchExercices();
         _showSuccessSnackbar('Suppression réussie');
       } else {
         throw Exception('Erreur suppression: ${response.statusCode}');
@@ -224,7 +274,7 @@ class _EmploisPageState extends State<EmploisPage> {
       final bytes = base64Decode(base64String);
       final fileType = _getFileTypeFromBytes(bytes);
       final extension = _getExtensionFromFileType(fileType);
-      final fileName = 'emploi_${DateTime.now().millisecondsSinceEpoch}.$extension';
+      final fileName = 'exercice_${DateTime.now().millisecondsSinceEpoch}.$extension';
 
       if (kIsWeb) {
         final mimeType = _getMimeType(fileType);
@@ -352,12 +402,14 @@ class _EmploisPageState extends State<EmploisPage> {
     }
   }
 
-  Future<void> _showAddOrEditDialog({Emploi? emploi}) async {
+  Future<void> _showAddOrEditDialog({Exercice? exercice}) async {
+    final contenuCtl = TextEditingController(text: exercice?.contenu ?? '');
     final dateCtl = TextEditingController(
-      text: emploi?.datePublication ?? DateTime.now().toString().substring(0, 10),
+      text: exercice?.datePublication ?? DateTime.now().toString().substring(0, 10),
     );
-    int? selectedClasseId = emploi?.classeId;
-    String localBase64 = emploi?.fichier ?? '';
+    List<int> selectedClasseIds = exercice?.classeIds ?? [];
+    int? selectedCourId = exercice?.courId;
+    String localBase64 = exercice?.fichier ?? '';
     String selectedFileName = localBase64.isEmpty ? '' : 'Fichier sélectionné';
 
     await showDialog(
@@ -365,11 +417,19 @@ class _EmploisPageState extends State<EmploisPage> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, dialogSetState) => AlertDialog(
-            title: Text(emploi == null ? 'Ajouter Emploi' : 'Modifier Emploi'),
+            title: Text(exercice == null ? 'Ajouter Exercice' : 'Modifier Exercice'),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  TextField(
+                    controller: contenuCtl,
+                    decoration: const InputDecoration(
+                      labelText: 'Contenu',
+                      hintText: 'Description de l\'exercice',
+                    ),
+                    maxLines: 3,
+                  ),
                   TextField(
                     controller: dateCtl,
                     decoration: const InputDecoration(
@@ -380,26 +440,54 @@ class _EmploisPageState extends State<EmploisPage> {
                   const SizedBox(height: 16),
                   _loadingClasses
                       ? const CircularProgressIndicator()
-                      : DropdownButtonFormField<int>(
-                          value: selectedClasseId,
+                      : InputDecorator(
                           decoration: const InputDecoration(
-                            labelText: 'Classe',
+                            labelText: 'Classes',
                             border: OutlineInputBorder(),
                           ),
-                          items: _classes.map((classe) {
+                          child: Column(
+                            children: [
+                              ..._classes.map((classe) {
+                                return CheckboxListTile(
+                                  title: Text(classe.niveau),
+                                  value: selectedClasseIds.contains(classe.id),
+                                  onChanged: (bool? selected) {
+                                    dialogSetState(() {
+                                      if (selected == true) {
+                                        selectedClasseIds.add(classe.id);
+                                      } else {
+                                        selectedClasseIds.remove(classe.id);
+                                      }
+                                    });
+                                  },
+                                );
+                              }).toList(),
+                            ],
+                          ),
+                        ),
+                  const SizedBox(height: 16),
+                  _loadingCours
+                      ? const CircularProgressIndicator()
+                      : DropdownButtonFormField<int>(
+                          value: selectedCourId,
+                          decoration: const InputDecoration(
+                            labelText: 'Cours',
+                            border: OutlineInputBorder(),
+                          ),
+                          items: _cours.map((cour) {
                             return DropdownMenuItem<int>(
-                              value: classe.id,
-                              child: Text(classe.niveau),
+                              value: cour.id,
+                              child: Text(cour.matiere),
                             );
                           }).toList(),
                           onChanged: (value) {
                             dialogSetState(() {
-                              selectedClasseId = value;
+                              selectedCourId = value;
                             });
                           },
                           validator: (value) {
                             if (value == null) {
-                              return 'Veuillez sélectionner une classe';
+                              return 'Veuillez sélectionner un cours';
                             }
                             return null;
                           },
@@ -440,13 +528,23 @@ class _EmploisPageState extends State<EmploisPage> {
               ),
               ElevatedButton(
                 onPressed: () async {
+                  if (contenuCtl.text.trim().isEmpty) {
+                    _showErrorSnackbar('Veuillez saisir un contenu');
+                    return;
+                  }
+
                   if (dateCtl.text.trim().isEmpty) {
                     _showErrorSnackbar('Veuillez saisir une date');
                     return;
                   }
 
-                  if (selectedClasseId == null) {
-                    _showErrorSnackbar('Veuillez sélectionner une classe');
+                  if (selectedClasseIds.isEmpty) {
+                    _showErrorSnackbar('Veuillez sélectionner au moins une classe');
+                    return;
+                  }
+
+                  if (selectedCourId == null) {
+                    _showErrorSnackbar('Veuillez sélectionner un cours');
                     return;
                   }
 
@@ -456,16 +554,18 @@ class _EmploisPageState extends State<EmploisPage> {
                   }
 
                   final payload = {
+                    'contenu': contenuCtl.text.trim(),
                     'datePublication': dateCtl.text.trim(),
-                    'classeId': selectedClasseId,
+                    'classeIds': selectedClasseIds,
+                    'courId': selectedCourId,
                     'fichier': localBase64,
                   };
 
                   try {
-                    if (emploi == null) {
-                      await _createEmploi(payload);
+                    if (exercice == null) {
+                      await _createExercice(payload);
                     } else {
-                      await _updateEmploi(emploi.id, payload);
+                      await _updateExercice(exercice.id, payload);
                     }
                     if (mounted) {
                       Navigator.pop(context);
@@ -476,7 +576,7 @@ class _EmploisPageState extends State<EmploisPage> {
                     }
                   }
                 },
-                child: Text(emploi == null ? 'Ajouter' : 'Enregistrer'),
+                child: Text(exercice == null ? 'Ajouter' : 'Enregistrer'),
               ),
             ],
           ),
@@ -489,7 +589,7 @@ class _EmploisPageState extends State<EmploisPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Emplois du Temps'),
+        title: const Text('Gestion des Exercices'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -499,12 +599,12 @@ class _EmploisPageState extends State<EmploisPage> {
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : _emplois.isEmpty
+          : _exercices.isEmpty
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text('Aucun emploi du temps disponible'),
+                      const Text('Aucun exercice disponible'),
                       const SizedBox(height: 16),
                       ElevatedButton(
                         onPressed: _fetchData,
@@ -514,12 +614,19 @@ class _EmploisPageState extends State<EmploisPage> {
                   ),
                 )
               : ListView.builder(
-                  itemCount: _emplois.length,
+                  itemCount: _exercices.length,
                   itemBuilder: (context, index) {
-                    final emploi = _emplois[index];
-                    final classe = _classes.firstWhere(
-                      (c) => c.id == emploi.classeId,
-                      orElse: () => Classe(id: 0, niveau: 'Inconnue', enseignantIds: []),
+                    final exercice = _exercices[index];
+                    final classesText = exercice.classeIds
+                        .map((id) => _classes.firstWhere(
+                              (c) => c.id == id,
+                              orElse: () => Classe(id: 0, niveau: 'Inconnue', enseignantIds: []),
+                            ).niveau)
+                        .join(', ');
+                    
+                    final cours = _cours.firstWhere(
+                      (c) => c.id == exercice.courId,
+                      orElse: () => Cours(id: 0, matiere: 'Inconnue'),
                     );
 
                     return Card(
@@ -528,27 +635,34 @@ class _EmploisPageState extends State<EmploisPage> {
                         children: [
                           ListTile(
                             leading: CircleAvatar(
-                              child: Text('#${emploi.id}'),
+                              child: Text('#${exercice.id}'),
                             ),
-                            title: Text('Classe: ${classe.niveau}'),
-                            subtitle: Text('Date: ${emploi.datePublication}'),
+                            title: Text('Cours: ${cours.matiere}'),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Classes: $classesText'),
+                                Text('Date: ${exercice.datePublication}'),
+                                Text(exercice.contenu),
+                              ],
+                            ),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 IconButton(
                                   icon: const Icon(Icons.edit),
-                                  onPressed: () => _showAddOrEditDialog(emploi: emploi),
+                                  onPressed: () => _showAddOrEditDialog(exercice: exercice),
                                 ),
                                 IconButton(
                                   icon: const Icon(Icons.delete),
-                                  onPressed: () => _confirmDelete(emploi.id),
+                                  onPressed: () => _confirmDelete(exercice.id),
                                 ),
                               ],
                             ),
                           ),
                           Padding(
                             padding: const EdgeInsets.all(8.0),
-                            child: _buildFilePreview(emploi.fichier),
+                            child: _buildFilePreview(exercice.fichier),
                           ),
                         ],
                       ),
@@ -567,7 +681,7 @@ class _EmploisPageState extends State<EmploisPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Confirmer la suppression'),
-        content: const Text('Voulez-vous vraiment supprimer cet emploi du temps ?'),
+        content: const Text('Voulez-vous vraiment supprimer cet exercice ?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -576,7 +690,7 @@ class _EmploisPageState extends State<EmploisPage> {
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              _deleteEmploi(id);
+              _deleteExercice(id);
             },
             child: const Text('Supprimer', style: TextStyle(color: Colors.red)),
           ),

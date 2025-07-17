@@ -5,6 +5,7 @@ import 'package:path/path.dart' as path;
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:url_launcher/url_launcher.dart'; // Nouveau package ajouté
 
 class EmploiDialog extends StatefulWidget {
   final Map<String, dynamic>? emploi;
@@ -26,7 +27,6 @@ class _EmploiDialogState extends State<EmploiDialog> {
   late TextEditingController _classeIdController;
   File? _selectedFile;
   String? _fileName;
-  List<int>? _selectedFileBytes; // <-- Ajout pour stocker les bytes sur web
 
   @override
   void initState() {
@@ -41,16 +41,19 @@ class _EmploiDialogState extends State<EmploiDialog> {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
-        withData: true, // pour web
+        withData: true,
+        allowCompression: false, // Désactive la compression
       );
 
       if (result != null) {
         final fileExtension = path.extension(result.files.single.name).toLowerCase();
         final originalFileName = result.files.single.name;
+        String? newFilePath;
+        String? relativePath;
+        
         if (kIsWeb) {
           setState(() {
             _fileName = originalFileName;
-            _selectedFileBytes = result.files.single.bytes;
           });
         } else {
           String projectDir = Directory.current.path;
@@ -59,30 +62,69 @@ class _EmploiDialogState extends State<EmploiDialog> {
             if (parent == projectDir) break;
             projectDir = parent;
           }
+          
           Directory targetDir;
           if (['.pdf'].contains(fileExtension)) {
             targetDir = Directory(path.join(projectDir, 'files', 'pdf'));
+            relativePath = path.join('files', 'pdf', originalFileName);
           } else {
             targetDir = Directory(path.join(projectDir, 'files', 'images'));
+            relativePath = path.join('files', 'images', originalFileName);
           }
+          
           if (!await targetDir.exists()) {
             await targetDir.create(recursive: true);
           }
-          final newFilePath = path.join(targetDir.path, originalFileName);
+          
+          newFilePath = path.join(targetDir.path, originalFileName);
           if (result.files.single.path != null) {
             await File(result.files.single.path!).copy(newFilePath);
           } else if (result.files.single.bytes != null) {
             await File(newFilePath).writeAsBytes(result.files.single.bytes!);
           }
+          
           setState(() {
-            _fileName = originalFileName;
-            _selectedFileBytes = null;
+            _fileName = relativePath;
           });
         }
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Erreur lors de la sélection du fichier : $e')),
+      );
+    }
+  }
+
+  // Nouvelle fonction pour ouvrir le fichier
+  Future<void> _openFile() async {
+    if (_fileName == null) return;
+
+    try {
+      String fileUrl;
+      if (kIsWeb) {
+        // Pour le web: utiliser une URL complète
+        fileUrl = 'http://localhost:8004/$_fileName';
+      } else {
+        // Pour mobile/desktop: utiliser le chemin absolu
+        String projectDir = Directory.current.path;
+        while (!File(path.join(projectDir, 'pubspec.yaml')).existsSync()) {
+          final parent = Directory(projectDir).parent.path;
+          if (parent == projectDir) break;
+          projectDir = parent;
+        }
+        fileUrl = path.join(projectDir, _fileName!);
+      }
+
+      final uri = Uri.parse(kIsWeb ? fileUrl : 'file://$fileUrl');
+      
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+      } else {
+        throw 'Impossible d\'ouvrir le fichier';
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erreur d\'ouverture : $e')),
       );
     }
   }
@@ -98,27 +140,7 @@ class _EmploiDialogState extends State<EmploiDialog> {
     };
 
     if (_fileName != null && _fileName!.isNotEmpty) {
-      data['nomFichier'] = _fileName;
-      List<int>? fileBytes;
-      try {
-        if (kIsWeb) {
-          fileBytes = _selectedFileBytes;
-        } else {
-          String projectDir = Directory.current.path;
-          String? filePath;
-          if (_fileName!.toLowerCase().endsWith('.pdf')) {
-            filePath = path.join(projectDir, 'files', 'pdf', _fileName!);
-          } else {
-            filePath = path.join(projectDir, 'files', 'images', _fileName!);
-          }
-          fileBytes = await File(filePath).readAsBytes();
-        }
-        if (fileBytes != null) {
-          data['fichier'] = base64Encode(fileBytes);
-        }
-      } catch (e) {
-        data['fichier'] = null;
-      }
+      data['fichier'] = _fileName;
     } else if (widget.emploi != null && widget.emploi!['fichier'] != null) {
       data['fichier'] = widget.emploi!['fichier'];
     }
@@ -132,7 +154,7 @@ class _EmploiDialogState extends State<EmploiDialog> {
         await widget.onSave();
         Navigator.of(context).pop();
       } else {
-        throw Exception('Erreur HTTP {response.statusCode}: {response.body}');
+        throw Exception('Erreur HTTP ${response.statusCode}: ${response.body}');
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -165,12 +187,26 @@ class _EmploiDialogState extends State<EmploiDialog> {
               const SizedBox(height: 15),
               ElevatedButton(
                 onPressed: _pickFile,
-                child: const Text('Sélectionner un fichier'),
+                child: const Text('Sélectionner un fichier (max 1 Go)'),
               ),
               if (_fileName != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 8.0),
-                  child: Text('Fichier sélectionné: $_fileName'),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Fichier sélectionné: ${path.basename(_fileName!)}',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.visibility),
+                        onPressed: _openFile,
+                        tooltip: 'Ouvrir le fichier',
+                      ),
+                    ],
+                  ),
                 ),
             ],
           ),

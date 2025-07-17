@@ -9,169 +9,122 @@ import 'package:open_file/open_file.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:universal_html/html.dart' as html;
 
-class Classe {
+class Cours {
   final int id;
-  final String niveau;
-  final List<int> enseignantIds;
-
-  Classe({
-    required this.id,
-    required this.niveau,
-    required this.enseignantIds,
-  });
-
-  factory Classe.fromJson(Map<String, dynamic> json) {
-    return Classe(
-      id: json['id'] as int,
-      niveau: json['niveau'] as String,
-      enseignantIds: (json['enseignantIds'] as List).map((e) => e as int).toList(),
-    );
-  }
-}
-
-class Emploi {
-  final int id;
-  final String datePublication;
   final String fichier;
-  final int classeId;
+  final String matiere;
+  final List<int> exerciceIds;
 
-  Emploi({
+  Cours({
     required this.id,
-    required this.datePublication,
     required this.fichier,
-    required this.classeId,
+    required this.matiere,
+    required this.exerciceIds,
   });
 
-  factory Emploi.fromJson(Map<String, dynamic> json) {
-    return Emploi(
+  factory Cours.fromJson(Map<String, dynamic> json) {
+    return Cours(
       id: json['id'] as int,
-      datePublication: json['datePublication'] as String? ?? '',
       fichier: json['fichier'] as String? ?? '',
-      classeId: json['classeId'] as int? ?? 0,
+      matiere: json['matiere'] as String? ?? '',
+      exerciceIds: (json['exerciceIds'] as List).map((e) => e as int).toList(),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'datePublication': datePublication,
       'fichier': fichier,
-      'classeId': classeId,
+      'matiere': matiere,
+      'exerciceIds': exerciceIds,
     };
   }
 }
 
-class EmploisPage extends StatefulWidget {
-  const EmploisPage({Key? key}) : super(key: key);
+class CoursPage extends StatefulWidget {
+  const CoursPage({Key? key}) : super(key: key);
 
   @override
-  State<EmploisPage> createState() => _EmploisPageState();
+  State<CoursPage> createState() => _CoursPageState();
 }
 
-class _EmploisPageState extends State<EmploisPage> {
-  static const String _emploisApiUrl = 'http://localhost:8004/api/emplois';
-  static const String _classesApiUrl = 'http://localhost:8004/api/classes';
+class _CoursPageState extends State<CoursPage> {
+  static const String _coursApiUrl = 'http://localhost:8004/api/cours';
   static const int _maxFileSize = 25 * 1024 * 1024;
 
-  final List<Emploi> _emplois = [];
-  final List<Classe> _classes = [];
+  final List<Cours> _cours = [];
   bool _loading = true;
-  bool _loadingClasses = true;
 
   @override
   void initState() {
     super.initState();
-    _fetchData();
+    _fetchCours();
   }
 
-  Future<void> _fetchData() async {
+  Future<void> _fetchCours() async {
     setState(() => _loading = true);
-    await Future.wait([_fetchEmplois(), _fetchClasses()]);
-    setState(() => _loading = false);
-  }
-
-  Future<void> _fetchEmplois() async {
     try {
-      final response = await http.get(Uri.parse(_emploisApiUrl));
+      final response = await http.get(Uri.parse(_coursApiUrl));
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body) as List<dynamic>;
         setState(() {
-          _emplois
+          _cours
             ..clear()
-            ..addAll(data.map((e) => Emploi.fromJson(e as Map<String, dynamic>)));
+            ..addAll(data.map((e) => Cours.fromJson(e as Map<String, dynamic>)));
+          _loading = false;
         });
       } else {
-        _showErrorSnackbar('Erreur lors de la récupération des emplois: ${response.statusCode}');
+        setState(() => _loading = false);
+        _showErrorSnackbar('Erreur lors de la récupération des cours: ${response.statusCode}');
       }
     } catch (e) {
+      setState(() => _loading = false);
       _showErrorSnackbar('Erreur réseau ou serveur: ${e.toString()}');
     }
   }
 
-  Future<void> _fetchClasses() async {
-    setState(() => _loadingClasses = true);
-    try {
-      final response = await http.get(Uri.parse(_classesApiUrl));
-      if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body) as List<dynamic>;
-        setState(() {
-          _classes
-            ..clear()
-            ..addAll(data.map((e) => Classe.fromJson(e as Map<String, dynamic>)));
-          _loadingClasses = false;
-        });
-      } else {
-        setState(() => _loadingClasses = false);
-        _showErrorSnackbar('Erreur lors de la récupération des classes: ${response.statusCode}');
-      }
-    } catch (e) {
-      setState(() => _loadingClasses = false);
-      _showErrorSnackbar('Erreur réseau ou serveur: ${e.toString()}');
-    }
-  }
-
-  Future<void> _createEmploi(Map<String, dynamic> body) async {
+  Future<void> _createCours(Map<String, dynamic> body) async {
     try {
       final response = await http.post(
-        Uri.parse(_emploisApiUrl),
+        Uri.parse(_coursApiUrl),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(body),
       );
 
       if (response.statusCode == 201 || response.statusCode == 200) {
-        _fetchEmplois();
-        _showSuccessSnackbar('Ajouté avec succès');
+        _fetchCours();
+        _showSuccessSnackbar('Cours ajouté avec succès');
       } else {
-        throw Exception('Erreur création emploi: ${response.statusCode} - ${response.body}');
+        throw Exception('Erreur création cours: ${response.statusCode} - ${response.body}');
       }
     } catch (e) {
       _showErrorSnackbar('Erreur lors de la création: ${e.toString()}');
     }
   }
 
-  Future<void> _updateEmploi(int id, Map<String, dynamic> body) async {
+  Future<void> _updateCours(int id, Map<String, dynamic> body) async {
     try {
       final response = await http.put(
-        Uri.parse('$_emploisApiUrl/$id'),
+        Uri.parse('$_coursApiUrl/$id'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(body),
       );
       
       if (response.statusCode == 200) {
-        _fetchEmplois();
-        _showSuccessSnackbar('Modifié avec succès');
+        _fetchCours();
+        _showSuccessSnackbar('Cours modifié avec succès');
       } else {
-        throw Exception('Erreur mise à jour emploi: ${response.statusCode}');
+        throw Exception('Erreur mise à jour cours: ${response.statusCode}');
       }
     } catch (e) {
       _showErrorSnackbar('Erreur lors de la mise à jour: ${e.toString()}');
     }
   }
 
-  Future<void> _deleteEmploi(int id) async {
+  Future<void> _deleteCours(int id) async {
     try {
-      final response = await http.delete(Uri.parse('$_emploisApiUrl/$id'));
+      final response = await http.delete(Uri.parse('$_coursApiUrl/$id'));
       if (response.statusCode == 200 || response.statusCode == 204) {
-        _fetchEmplois();
+        _fetchCours();
         _showSuccessSnackbar('Suppression réussie');
       } else {
         throw Exception('Erreur suppression: ${response.statusCode}');
@@ -224,7 +177,7 @@ class _EmploisPageState extends State<EmploisPage> {
       final bytes = base64Decode(base64String);
       final fileType = _getFileTypeFromBytes(bytes);
       final extension = _getExtensionFromFileType(fileType);
-      final fileName = 'emploi_${DateTime.now().millisecondsSinceEpoch}.$extension';
+      final fileName = 'cours_${DateTime.now().millisecondsSinceEpoch}.$extension';
 
       if (kIsWeb) {
         final mimeType = _getMimeType(fileType);
@@ -294,7 +247,7 @@ class _EmploisPageState extends State<EmploisPage> {
   }
 
   Widget _buildFilePreview(String base64String) {
-    if (base64String.isEmpty) {
+    if (base64String.isEmpty || base64String == 'hhhh') {
       return const ListTile(
         leading: Icon(Icons.error, color: Colors.red),
         title: Text('Aucun fichier disponible'),
@@ -352,12 +305,9 @@ class _EmploisPageState extends State<EmploisPage> {
     }
   }
 
-  Future<void> _showAddOrEditDialog({Emploi? emploi}) async {
-    final dateCtl = TextEditingController(
-      text: emploi?.datePublication ?? DateTime.now().toString().substring(0, 10),
-    );
-    int? selectedClasseId = emploi?.classeId;
-    String localBase64 = emploi?.fichier ?? '';
+  Future<void> _showAddOrEditDialog({Cours? cours}) async {
+    final matiereCtl = TextEditingController(text: cours?.matiere ?? '');
+    String localBase64 = cours?.fichier ?? '';
     String selectedFileName = localBase64.isEmpty ? '' : 'Fichier sélectionné';
 
     await showDialog(
@@ -365,45 +315,18 @@ class _EmploisPageState extends State<EmploisPage> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, dialogSetState) => AlertDialog(
-            title: Text(emploi == null ? 'Ajouter Emploi' : 'Modifier Emploi'),
+            title: Text(cours == null ? 'Ajouter Cours' : 'Modifier Cours'),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   TextField(
-                    controller: dateCtl,
+                    controller: matiereCtl,
                     decoration: const InputDecoration(
-                      labelText: 'Date Publication',
-                      hintText: 'AAAA-MM-JJ',
+                      labelText: 'Matière',
+                      hintText: 'Nom de la matière',
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  _loadingClasses
-                      ? const CircularProgressIndicator()
-                      : DropdownButtonFormField<int>(
-                          value: selectedClasseId,
-                          decoration: const InputDecoration(
-                            labelText: 'Classe',
-                            border: OutlineInputBorder(),
-                          ),
-                          items: _classes.map((classe) {
-                            return DropdownMenuItem<int>(
-                              value: classe.id,
-                              child: Text(classe.niveau),
-                            );
-                          }).toList(),
-                          onChanged: (value) {
-                            dialogSetState(() {
-                              selectedClasseId = value;
-                            });
-                          },
-                          validator: (value) {
-                            if (value == null) {
-                              return 'Veuillez sélectionner une classe';
-                            }
-                            return null;
-                          },
-                        ),
                   const SizedBox(height: 16),
                   if (localBase64.isNotEmpty) _buildFilePreview(localBase64),
                   const SizedBox(height: 16),
@@ -440,13 +363,8 @@ class _EmploisPageState extends State<EmploisPage> {
               ),
               ElevatedButton(
                 onPressed: () async {
-                  if (dateCtl.text.trim().isEmpty) {
-                    _showErrorSnackbar('Veuillez saisir une date');
-                    return;
-                  }
-
-                  if (selectedClasseId == null) {
-                    _showErrorSnackbar('Veuillez sélectionner une classe');
+                  if (matiereCtl.text.trim().isEmpty) {
+                    _showErrorSnackbar('Veuillez saisir une matière');
                     return;
                   }
 
@@ -456,16 +374,16 @@ class _EmploisPageState extends State<EmploisPage> {
                   }
 
                   final payload = {
-                    'datePublication': dateCtl.text.trim(),
-                    'classeId': selectedClasseId,
+                    'matiere': matiereCtl.text.trim(),
                     'fichier': localBase64,
+                    'exerciceIds': cours?.exerciceIds ?? [],
                   };
 
                   try {
-                    if (emploi == null) {
-                      await _createEmploi(payload);
+                    if (cours == null) {
+                      await _createCours(payload);
                     } else {
-                      await _updateEmploi(emploi.id, payload);
+                      await _updateCours(cours.id, payload);
                     }
                     if (mounted) {
                       Navigator.pop(context);
@@ -476,7 +394,7 @@ class _EmploisPageState extends State<EmploisPage> {
                     }
                   }
                 },
-                child: Text(emploi == null ? 'Ajouter' : 'Enregistrer'),
+                child: Text(cours == null ? 'Ajouter' : 'Enregistrer'),
               ),
             ],
           ),
@@ -489,66 +407,61 @@ class _EmploisPageState extends State<EmploisPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Emplois du Temps'),
+        title: const Text('Gestion des Cours'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _fetchData,
+            onPressed: _fetchCours,
           ),
         ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : _emplois.isEmpty
+          : _cours.isEmpty
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text('Aucun emploi du temps disponible'),
+                      const Text('Aucun cours disponible'),
                       const SizedBox(height: 16),
                       ElevatedButton(
-                        onPressed: _fetchData,
+                        onPressed: _fetchCours,
                         child: const Text('Actualiser'),
                       ),
                     ],
                   ),
                 )
               : ListView.builder(
-                  itemCount: _emplois.length,
+                  itemCount: _cours.length,
                   itemBuilder: (context, index) {
-                    final emploi = _emplois[index];
-                    final classe = _classes.firstWhere(
-                      (c) => c.id == emploi.classeId,
-                      orElse: () => Classe(id: 0, niveau: 'Inconnue', enseignantIds: []),
-                    );
-
+                    final cours = _cours[index];
                     return Card(
                       margin: const EdgeInsets.all(8),
                       child: Column(
                         children: [
                           ListTile(
                             leading: CircleAvatar(
-                              child: Text('#${emploi.id}'),
+                              child: Text('#${cours.id}'),
                             ),
-                            title: Text('Classe: ${classe.niveau}'),
-                            subtitle: Text('Date: ${emploi.datePublication}'),
+                            title: Text('Matière: ${cours.matiere}'),
+                            subtitle: Text('${cours.exerciceIds.length} exercices associés'),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 IconButton(
                                   icon: const Icon(Icons.edit),
-                                  onPressed: () => _showAddOrEditDialog(emploi: emploi),
+                                  onPressed: () => _showAddOrEditDialog(cours: cours),
                                 ),
                                 IconButton(
                                   icon: const Icon(Icons.delete),
-                                  onPressed: () => _confirmDelete(emploi.id),
+                                  onPressed: () => _confirmDelete(cours.id),
                                 ),
                               ],
                             ),
                           ),
                           Padding(
                             padding: const EdgeInsets.all(8.0),
-                            child: _buildFilePreview(emploi.fichier),
+                            child: _buildFilePreview(cours.fichier),
                           ),
                         ],
                       ),
@@ -567,7 +480,7 @@ class _EmploisPageState extends State<EmploisPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Confirmer la suppression'),
-        content: const Text('Voulez-vous vraiment supprimer cet emploi du temps ?'),
+        content: const Text('Voulez-vous vraiment supprimer ce cours ?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -576,7 +489,7 @@ class _EmploisPageState extends State<EmploisPage> {
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              _deleteEmploi(id);
+              _deleteCours(id);
             },
             child: const Text('Supprimer', style: TextStyle(color: Colors.red)),
           ),

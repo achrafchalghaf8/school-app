@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/auth_service.dart';
 import '../models/user.dart';
 
@@ -16,6 +17,46 @@ class _LoginPageState extends State<LoginPage> {
   final _passwordController = TextEditingController();
   final _authService = AuthService();
   bool _isLoading = false;
+  bool _rememberMe = false;
+
+  // Méthode pour sauvegarder les informations utilisateur dans le localStorage
+  Future<void> _saveUserData(User user) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('userId', user.id);
+    await prefs.setString('email', user.email);
+    await prefs.setString('role', user.role);
+    await prefs.setString('token', user.token);
+    await prefs.setBool('isLoggedIn', true);
+    
+    if (_rememberMe) {
+      await prefs.setString('savedEmail', _emailController.text.trim());
+      await prefs.setString('savedPassword', _passwordController.text.trim());
+    } else {
+      await prefs.remove('savedEmail');
+      await prefs.remove('savedPassword');
+    }
+  }
+
+  // Méthode pour charger les identifiants enregistrés
+  Future<void> _loadSavedCredentials() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedEmail = prefs.getString('savedEmail');
+    final savedPassword = prefs.getString('savedPassword');
+    
+    if (savedEmail != null && savedPassword != null) {
+      setState(() {
+        _emailController.text = savedEmail;
+        _passwordController.text = savedPassword;
+        _rememberMe = true;
+      });
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedCredentials();
+  }
 
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
@@ -28,13 +69,26 @@ class _LoginPageState extends State<LoginPage> {
         _passwordController.text.trim(),
       );
 
+      // Sauvegarder les données utilisateur
+      await _saveUserData(user);
+
       // Role-based redirection
       if (user.role == 'ADMIN') {
         Navigator.pushReplacementNamed(context, '/admin');
       } else if (user.role == 'PARENT') {
         Navigator.pushReplacementNamed(context, '/parent');
+      } else if (user.role == 'ENSEIGNANT') {
+        Navigator.pushReplacementNamed(
+          context,
+          '/teacher',
+          arguments: {
+            'userId': user.id,
+            'token': user.token,
+          },
+        );
       } else {
-        Navigator.pushReplacementNamed(context, '/teacher');
+        // Fallback: redirection générique
+        Navigator.pushReplacementNamed(context, '/login');
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -75,7 +129,7 @@ class _LoginPageState extends State<LoginPage> {
                     children: [
                       // School Logo
                       Image.asset(
-                        'assets/images/school_logo.png', // Replace with your logo asset
+                        'assets/images/school_logo.png',
                         height: 100,
                         errorBuilder: (context, error, stackTrace) => const Icon(
                           Icons.school,
@@ -148,12 +202,25 @@ class _LoginPageState extends State<LoginPage> {
                           return null;
                         },
                       ),
+                      // Remember me checkbox
+                      Row(
+                        children: [
+                          Checkbox(
+                            value: _rememberMe,
+                            onChanged: (value) {
+                              setState(() {
+                                _rememberMe = value ?? false;
+                              });
+                            },
+                          ),
+                          const Text('Se souvenir de moi'),
+                        ],
+                      ),
                       // Forgot Password Link
                       Align(
                         alignment: Alignment.centerRight,
                         child: TextButton(
                           onPressed: () {
-                            // Navigate to forgot password page
                             Navigator.pushNamed(context, '/forgot-password');
                           },
                           child: const Text(
@@ -189,7 +256,6 @@ class _LoginPageState extends State<LoginPage> {
                           const Text('Pas de compte ? '),
                           TextButton(
                             onPressed: () {
-                              // Navigate to sign-up page
                               Navigator.pushNamed(context, '/signup');
                             },
                             child: const Text(
