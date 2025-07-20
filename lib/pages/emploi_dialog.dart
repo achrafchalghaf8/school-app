@@ -5,7 +5,6 @@ import 'package:path/path.dart' as path;
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:url_launcher/url_launcher.dart'; // Nouveau package ajouté
 
 class EmploiDialog extends StatefulWidget {
   final Map<String, dynamic>? emploi;
@@ -41,8 +40,7 @@ class _EmploiDialogState extends State<EmploiDialog> {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
-        withData: true,
-        allowCompression: false, // Désactive la compression
+        withData: true, // pour web
       );
 
       if (result != null) {
@@ -50,19 +48,19 @@ class _EmploiDialogState extends State<EmploiDialog> {
         final originalFileName = result.files.single.name;
         String? newFilePath;
         String? relativePath;
-        
         if (kIsWeb) {
           setState(() {
             _fileName = originalFileName;
           });
         } else {
+          // Pour mobile/desktop, on copie dans files/images ou files/pdf à la racine du projet
           String projectDir = Directory.current.path;
+          // Si on est dans un sous-dossier (ex: build/), on remonte jusqu'à trouver pubspec.yaml
           while (!File(path.join(projectDir, 'pubspec.yaml')).existsSync()) {
             final parent = Directory(projectDir).parent.path;
             if (parent == projectDir) break;
             projectDir = parent;
           }
-          
           Directory targetDir;
           if (['.pdf'].contains(fileExtension)) {
             targetDir = Directory(path.join(projectDir, 'files', 'pdf'));
@@ -71,18 +69,16 @@ class _EmploiDialogState extends State<EmploiDialog> {
             targetDir = Directory(path.join(projectDir, 'files', 'images'));
             relativePath = path.join('files', 'images', originalFileName);
           }
-          
           if (!await targetDir.exists()) {
             await targetDir.create(recursive: true);
           }
-          
           newFilePath = path.join(targetDir.path, originalFileName);
+          // Toujours écrire le fichier, même s'il existe déjà (remplacement)
           if (result.files.single.path != null) {
             await File(result.files.single.path!).copy(newFilePath);
           } else if (result.files.single.bytes != null) {
             await File(newFilePath).writeAsBytes(result.files.single.bytes!);
           }
-          
           setState(() {
             _fileName = relativePath;
           });
@@ -91,40 +87,6 @@ class _EmploiDialogState extends State<EmploiDialog> {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Erreur lors de la sélection du fichier : $e')),
-      );
-    }
-  }
-
-  // Nouvelle fonction pour ouvrir le fichier
-  Future<void> _openFile() async {
-    if (_fileName == null) return;
-
-    try {
-      String fileUrl;
-      if (kIsWeb) {
-        // Pour le web: utiliser une URL complète
-        fileUrl = 'http://localhost:8004/$_fileName';
-      } else {
-        // Pour mobile/desktop: utiliser le chemin absolu
-        String projectDir = Directory.current.path;
-        while (!File(path.join(projectDir, 'pubspec.yaml')).existsSync()) {
-          final parent = Directory(projectDir).parent.path;
-          if (parent == projectDir) break;
-          projectDir = parent;
-        }
-        fileUrl = path.join(projectDir, _fileName!);
-      }
-
-      final uri = Uri.parse(kIsWeb ? fileUrl : 'file://$fileUrl');
-      
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri);
-      } else {
-        throw 'Impossible d\'ouvrir le fichier';
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur d\'ouverture : $e')),
       );
     }
   }
@@ -139,6 +101,7 @@ class _EmploiDialogState extends State<EmploiDialog> {
       'classeId': int.parse(_classeIdController.text),
     };
 
+    // Toujours renseigner le champ fichier, même si on édite sans changer le fichier
     if (_fileName != null && _fileName!.isNotEmpty) {
       data['fichier'] = _fileName;
     } else if (widget.emploi != null && widget.emploi!['fichier'] != null) {
@@ -154,7 +117,7 @@ class _EmploiDialogState extends State<EmploiDialog> {
         await widget.onSave();
         Navigator.of(context).pop();
       } else {
-        throw Exception('Erreur HTTP ${response.statusCode}: ${response.body}');
+        throw Exception('Erreur HTTP {response.statusCode}: {response.body}');
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -187,26 +150,12 @@ class _EmploiDialogState extends State<EmploiDialog> {
               const SizedBox(height: 15),
               ElevatedButton(
                 onPressed: _pickFile,
-                child: const Text('Sélectionner un fichier (max 1 Go)'),
+                child: const Text('Sélectionner un fichier'),
               ),
               if (_fileName != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 8.0),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Fichier sélectionné: ${path.basename(_fileName!)}',
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.visibility),
-                        onPressed: _openFile,
-                        tooltip: 'Ouvrir le fichier',
-                      ),
-                    ],
-                  ),
+                  child: Text('Fichier sélectionné: $_fileName'),
                 ),
             ],
           ),

@@ -48,6 +48,11 @@ class _ExercicesPageState extends State<ExercicesPage> {
   bool _isLoading = false;
   int? _userId;
 
+  // Define colors as constant hexadecimal values
+  static const Color _primaryColor = Color(0xFF0D47A1); // Equivalent to Colors.blue.shade900
+  static const Color _blueShade700 = Color(0xFF1976D2); // Equivalent to Colors.blue.shade700
+  static const Color _redShade400 = Color(0xFFEF5350); // Equivalent to Colors.red.shade400
+
   @override
   void initState() {
     super.initState();
@@ -78,7 +83,9 @@ class _ExercicesPageState extends State<ExercicesPage> {
       );
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
-        return data.cast<Map<String, dynamic>>();
+        // Filtrer les exercices pour ne garder que ceux qui appartiennent au cours actuel
+        final filteredExercices = data.where((ex) => ex['courId'] == widget.courId).toList();
+        return filteredExercices.cast<Map<String, dynamic>>();
       } else {
         throw Exception('Failed to load exercises: ${response.statusCode}');
       }
@@ -189,12 +196,14 @@ class _ExercicesPageState extends State<ExercicesPage> {
     final isPdf = fileExtension == 'pdf';
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
         const SizedBox(height: 8),
         Text(
           'Fichier joint: $fileName',
           style: const TextStyle(fontWeight: FontWeight.bold),
+          textAlign: TextAlign.center,
         ),
         const SizedBox(height: 8),
         if (isImage)
@@ -203,14 +212,15 @@ class _ExercicesPageState extends State<ExercicesPage> {
             child: Image.memory(
               base64Decode(base64String),
               height: 100,
+              width: 150,
               fit: BoxFit.contain,
               errorBuilder: (_, __, ___) => const Icon(Icons.broken_image),
             ),
           ),
         if (isPdf)
-          const Icon(Icons.picture_as_pdf, size: 50, color: Colors.red),
+          const Icon(Icons.picture_as_pdf, size: 100, color: Colors.red),
         if (!isImage && !isPdf)
-          const Icon(Icons.insert_drive_file, size: 50),
+          const Icon(Icons.insert_drive_file, size: 100),
         const SizedBox(height: 8),
         ElevatedButton(
           onPressed: () => _downloadAndOpenFile(base64String, fileName),
@@ -254,31 +264,38 @@ class _ExercicesPageState extends State<ExercicesPage> {
         builder: (ctx) => StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
-              title: const Text('Ajouter un exercice'),
+              title: Text('Ajouter un exercice', style: TextStyle(color: _primaryColor, fontWeight: FontWeight.bold)),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('Matière: ${cour['matiere']}'),
+                    Text('Matière: ${cour['matiere']}', style: TextStyle(color: _primaryColor)),
                     const SizedBox(height: 10),
                     TextFormField(
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Contenu (optionnel)',
-                        hintText: 'Description de l\'exercice'),
+                        hintText: 'Description de l\'exercice',
+                        labelStyle: TextStyle(color: _primaryColor),
+                      ),
                       onChanged: (val) => contenu = val,
                     ),
                     TextFormField(
                       initialValue: date,
-                      decoration: const InputDecoration(labelText: 'Date de publication'),
+                      decoration: InputDecoration(
+                        labelText: 'Date de publication',
+                        labelStyle: TextStyle(color: _primaryColor),
+                      ),
                       onChanged: (val) => date = val,
                     ),
                     const SizedBox(height: 10),
-                    const Text('Classes assignées:'),
+                    Text('Classes assignées:', style: TextStyle(fontWeight: FontWeight.bold, color: _primaryColor)),
                     if (classes.isEmpty)
-                      const Text('Aucune classe disponible'),
+                      Text('Aucune classe disponible', style: TextStyle(color: _primaryColor)),
                     ...classes.map((classe) => CheckboxListTile(
-                      title: Text('${classe['niveau']} (ID: ${classe['id']})'),
+                      title: Text('${classe['niveau']} (ID: ${classe['id']})', style: TextStyle(color: _primaryColor)),
                       value: selectedClassIds.contains(classe['id']),
+                      checkColor: Colors.white,
+                      activeColor: _primaryColor,
                       onChanged: (bool? value) {
                         setState(() {
                           if (value == true) {
@@ -291,8 +308,12 @@ class _ExercicesPageState extends State<ExercicesPage> {
                     )).toList(),
                     const SizedBox(height: 10),
                     ElevatedButton.icon(
-                      icon: const Icon(Icons.attach_file),
-                      label: Text(fileName.isEmpty ? 'Joindre un fichier (optionnel)' : fileName),
+                      icon: Icon(Icons.attach_file, color: _primaryColor),
+                      label: Text(fileName.isEmpty ? 'Joindre un fichier (optionnel)' : fileName, style: TextStyle(color: _primaryColor)),
+                      style: ElevatedButton.styleFrom(
+                        side: BorderSide(color: _primaryColor),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
                       onPressed: () async {
                         final result = await FilePicker.platform.pickFiles();
                         if (result != null && result.files.single.bytes != null) {
@@ -308,7 +329,7 @@ class _ExercicesPageState extends State<ExercicesPage> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Annuler'),
+                  child: Text('Annuler', style: TextStyle(color: _primaryColor)),
                 ),
                 ElevatedButton(
                   onPressed: () async {
@@ -343,9 +364,10 @@ class _ExercicesPageState extends State<ExercicesPage> {
                       setState(() => _isLoading = false);
                     }
                   },
+                  style: ElevatedButton.styleFrom(backgroundColor: _primaryColor),
                   child: _isLoading 
-                      ? const CircularProgressIndicator()
-                      : const Text('Ajouter'),
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : Text('Ajouter', style: TextStyle(color: Colors.white)),
                 ),
               ],
             );
@@ -375,32 +397,39 @@ class _ExercicesPageState extends State<ExercicesPage> {
         builder: (ctx) => StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
-              title: const Text('Modifier l\'exercice'),
+              title: Text('Modifier l\'exercice', style: TextStyle(color: _primaryColor, fontWeight: FontWeight.bold)),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('Matière: ${cour['matiere']}'),
+                    Text('Matière: ${cour['matiere']}', style: TextStyle(color: _primaryColor)),
                     const SizedBox(height: 10),
                     TextFormField(
                       initialValue: contenu,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Contenu (optionnel)',
-                        hintText: 'Description de l\'exercice'),
+                        hintText: 'Description de l\'exercice',
+                        labelStyle: TextStyle(color: _primaryColor),
+                      ),
                       onChanged: (val) => contenu = val,
                     ),
                     TextFormField(
                       initialValue: date,
-                      decoration: const InputDecoration(labelText: 'Date de publication'),
+                      decoration: InputDecoration(
+                        labelText: 'Date de publication',
+                        labelStyle: TextStyle(color: _primaryColor),
+                      ),
                       onChanged: (val) => date = val,
                     ),
                     const SizedBox(height: 10),
-                    const Text('Classes assignées:'),
+                    Text('Classes assignées:', style: TextStyle(fontWeight: FontWeight.bold, color: _primaryColor)),
                     if (classes.isEmpty)
-                      const Text('Aucune classe disponible'),
+                      Text('Aucune classe disponible', style: TextStyle(color: _primaryColor)),
                     ...classes.map((classe) => CheckboxListTile(
-                      title: Text('${classe['niveau']} (ID: ${classe['id']})'),
+                      title: Text('${classe['niveau']} (ID: ${classe['id']})', style: TextStyle(color: _primaryColor)),
                       value: selectedClassIds.contains(classe['id']),
+                      checkColor: Colors.white,
+                      activeColor: _primaryColor,
                       onChanged: (bool? value) {
                         setState(() {
                           if (value == true) {
@@ -413,8 +442,12 @@ class _ExercicesPageState extends State<ExercicesPage> {
                     )).toList(),
                     const SizedBox(height: 10),
                     ElevatedButton.icon(
-                      icon: const Icon(Icons.attach_file),
-                      label: Text(fileName.isEmpty ? 'Joindre un fichier (optionnel)' : fileName),
+                      icon: Icon(Icons.attach_file, color: _primaryColor),
+                      label: Text(fileName.isEmpty ? 'Joindre un fichier (optionnel)' : fileName, style: TextStyle(color: _primaryColor)),
+                      style: ElevatedButton.styleFrom(
+                        side: BorderSide(color: _primaryColor),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
                       onPressed: () async {
                         final result = await FilePicker.platform.pickFiles();
                         if (result != null && result.files.single.bytes != null) {
@@ -433,7 +466,7 @@ class _ExercicesPageState extends State<ExercicesPage> {
                           fileRemoved = true;
                           setState(() {});
                         },
-                        child: const Text('Supprimer le fichier', style: TextStyle(color: Colors.red)),
+                        child: Text('Supprimer le fichier', style: TextStyle(color: _redShade400)),
                       ),
                   ],
                 ),
@@ -441,7 +474,7 @@ class _ExercicesPageState extends State<ExercicesPage> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Annuler'),
+                  child: Text('Annuler', style: TextStyle(color: _primaryColor)),
                 ),
                 ElevatedButton(
                   onPressed: () async {
@@ -485,9 +518,10 @@ class _ExercicesPageState extends State<ExercicesPage> {
                       setState(() => _isLoading = false);
                     }
                   },
+                  style: ElevatedButton.styleFrom(backgroundColor: _primaryColor),
                   child: _isLoading 
-                      ? const CircularProgressIndicator()
-                      : const Text('Enregistrer'),
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : Text('Enregistrer', style: TextStyle(color: Colors.white)),
                 ),
               ],
             );
@@ -505,16 +539,17 @@ class _ExercicesPageState extends State<ExercicesPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Confirmation'),
-        content: const Text('Voulez-vous vraiment supprimer cet exercice ?'),
+        title: Text('Confirmation', style: TextStyle(color: _primaryColor, fontWeight: FontWeight.bold)),
+        content: Text('Voulez-vous vraiment supprimer cet exercice ?', style: TextStyle(color: _primaryColor)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Annuler'),
+            child: Text('Annuler', style: TextStyle(color: _primaryColor)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Supprimer', style: TextStyle(color: Colors.red)),
+            style: ElevatedButton.styleFrom(backgroundColor: _primaryColor),
+            child: Text('Supprimer', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -546,105 +581,148 @@ class _ExercicesPageState extends State<ExercicesPage> {
           future: _courFuture,
           builder: (context, snapshot) {
             if (snapshot.hasData) {
-              return Text('Exercices - ${snapshot.data!['matiere']}');
+              return Text('Exercices - ${snapshot.data!['matiere']}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold));
             } else if (snapshot.hasError) {
-              return const Text('Exercices');
+              return const Text('Exercices', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold));
             }
-            return const Text('Chargement...');
+            return const Text('Chargement...', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold));
           },
         ),
+        backgroundColor: _primaryColor,
+        elevation: 4,
         actions: [
           IconButton(
-            icon: const Icon(Icons.add),
+            icon: const Icon(Icons.add_box, color: Colors.white),
             onPressed: _showAddExerciseDialog,
             tooltip: 'Ajouter un exercice',
           ),
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: _refreshData,
             tooltip: 'Actualiser',
           ),
         ],
       ),
-      body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: _exercicesFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text('Erreur: ${snapshot.error}'));
-          }
-          final exercices = snapshot.data ?? [];
-          if (exercices.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text('Aucun exercice trouvé'),
-                  const SizedBox(height: 20),
-                  ElevatedButton(
-                    onPressed: _showAddExerciseDialog,
-                    child: const Text('Ajouter un exercice'),
-                  ),
-                ],
-              ),
-            );
-          }
-          return ListView.builder(
-            itemCount: exercices.length,
-            itemBuilder: (context, index) {
-              final ex = exercices[index];
-              final hasFile = ex['fichier'] != null && ex['fichier'] != "no content";
-              final fileName = hasFile ? 'exercice_${ex['id']}.${_getFileExtension(ex['fichier'])}' : '';
+      body: Container(
+        color: Colors.grey.shade50,
+        child: FutureBuilder<List<Map<String, dynamic>>>(
+          future: _exercicesFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(_primaryColor),
+                ),
+              );
+            }
+            if (snapshot.hasError) {
+              return Center(
+                child: Text(
+                  'Erreur: ${snapshot.error}',
+                  style: TextStyle(color: Colors.red.shade700, fontSize: 16),
+                ),
+              );
+            }
+            final exercices = snapshot.data ?? [];
+            if (exercices.isEmpty) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Aucun exercice trouvé',
+                      style: TextStyle(
+                        fontSize: 20,
+                        color: Colors.grey.shade600,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _primaryColor,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      ),
+                      onPressed: _showAddExerciseDialog,
+                      child: const Text('Ajouter un exercice', style: TextStyle(color: Colors.white)),
+                    ),
+                  ],
+                ),
+              );
+            }
+            return RefreshIndicator(
+              onRefresh: () async {
+                _refreshData();
+              },
+              color: _primaryColor,
+              child: ListView.builder(
+                padding: const EdgeInsets.all(12),
+                itemCount: exercices.length,
+                itemBuilder: (context, index) {
+                  final ex = exercices[index];
+                  final hasFile = ex['fichier'] != null && ex['fichier'] != "no content";
+                  final fileName = hasFile ? 'exercice_${ex['id']}.${_getFileExtension(ex['fichier'])}' : '';
 
-              return Card(
-                margin: const EdgeInsets.all(8),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  return Card(
+                    margin: const EdgeInsets.all(12),
+                    elevation: 6,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    color: Colors.white,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center, // Center vertically within the card
+                        crossAxisAlignment: CrossAxisAlignment.center, // Center horizontally within the card
                         children: [
-                          Expanded(
-                            child: Text(
-                              ex['contenu'] != "no content" 
-                                  ? ex['contenu'] 
-                                  : 'Exercice ${ex['id']}',
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16),
+                          Text(
+                            ex['contenu'] != "no content" 
+                                ? ex['contenu'] 
+                                : 'Exercice ${ex['id']}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 20,
+                              color: _primaryColor,
                             ),
+                            textAlign: TextAlign.center, // Center the text
                           ),
+                          const SizedBox(height: 16),
+                          if (hasFile) _buildFilePreview(ex['fichier'], fileName),
+                          const SizedBox(height: 16),
                           Row(
-                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center, // Center the buttons horizontally
                             children: [
                               IconButton(
-                                icon: const Icon(Icons.edit, color: Colors.blue),
+                                icon: Icon(Icons.edit, color: _blueShade700),
                                 onPressed: () => _showEditExerciseDialog(ex),
+                                tooltip: 'Modifier',
                               ),
                               IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.red),
+                                icon: Icon(Icons.delete, color: _redShade400),
                                 onPressed: () => _deleteExercise(ex['id']),
+                                tooltip: 'Supprimer',
                               ),
                             ],
                           ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Date: ${ex['datePublication'] ?? 'Non spécifiée'}',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey.shade600,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                       
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      Text('Date: ${ex['datePublication'] ?? 'Non spécifiée'}'),
-                      Text('Classes: ${ex['classeIds']?.join(', ') ?? 'Aucune'}'),
-                      if (hasFile) 
-                        _buildFilePreview(ex['fichier'], fileName),
-                    ],
-                  ),
-                ),
-              );
-            },
-          );
-        },
+                    ),
+                  );
+                },
+              ),
+            );
+          },
+        ),
       ),
     );
   }

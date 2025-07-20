@@ -32,6 +32,12 @@ class _ClasseDetailPageState extends State<ClasseDetailPage> {
   bool _loading = true;
   String _error = '';
   bool _isLoading = false;
+  static const String _fileSeparator = '||SEP||XyZ1234||SEP||';
+
+  // Define colors as constant hexadecimal values
+  static const Color _primaryColor = Color(0xFF0D47A1); // Equivalent to Colors.blue.shade900
+  static const Color _blueShade700 = Color(0xFF1976D2); // Equivalent to Colors.blue.shade700
+  static const Color _redShade400 = Color(0xFFEF5350); // Equivalent to Colors.red.shade400
 
   @override
   void initState() {
@@ -154,7 +160,7 @@ class _ClasseDetailPageState extends State<ClasseDetailPage> {
     }
   }
 
-  Widget _buildFilePreview(String base64String, String fileName) {
+  Widget _buildSingleFilePreview(String base64String, String fileName) {
     if (base64String.isEmpty || base64String == "no content") {
       return const SizedBox.shrink();
     }
@@ -178,14 +184,15 @@ class _ClasseDetailPageState extends State<ClasseDetailPage> {
             child: Image.memory(
               base64Decode(base64String),
               height: 100,
+              width: 150,
               fit: BoxFit.contain,
               errorBuilder: (_, __, ___) => const Icon(Icons.broken_image),
             ),
           ),
         if (isPdf)
-          const Icon(Icons.picture_as_pdf, size: 50, color: Colors.red),
+          const Icon(Icons.picture_as_pdf, size: 100, color: Colors.red),
         if (!isImage && !isPdf)
-          const Icon(Icons.insert_drive_file, size: 50),
+          const Icon(Icons.insert_drive_file, size: 100),
         const SizedBox(height: 8),
         ElevatedButton(
           onPressed: () => _downloadAndOpenFile(base64String, fileName),
@@ -212,10 +219,25 @@ class _ClasseDetailPageState extends State<ClasseDetailPage> {
     );
   }
 
+  Widget _buildFileItemWithDelete(Map<String, dynamic> file, VoidCallback onDelete) {
+    return Stack(
+      children: [
+        _buildSingleFilePreview(file['base64'], file['fileName']),
+        Positioned(
+          top: 0,
+          right: 0,
+          child: IconButton(
+            icon: Icon(Icons.delete, color: _redShade400),
+            onPressed: onDelete,
+          ),
+        ),
+      ],
+    );
+  }
+
   void _showAddCourseWithExerciseDialog() {
     String matiere = '';
-    String coursFichierBase64 = '';
-    String coursFileName = '';
+    List<Map<String, dynamic>> selectedFiles = [];
     bool showExerciseFields = false;
     
     String exerciceContenu = '';
@@ -228,36 +250,64 @@ class _ClasseDetailPageState extends State<ClasseDetailPage> {
       builder: (ctx) => StatefulBuilder(
         builder: (context, setState) {
           return AlertDialog(
-            title: const Text('Ajouter un nouveau cours'),
+            title: Text('Ajouter un nouveau cours', style: TextStyle(color: _primaryColor, fontWeight: FontWeight.bold)),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('Informations du cours', 
-                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text('Informations du cours', 
+                      style: TextStyle(fontWeight: FontWeight.bold, color: _primaryColor)),
                   TextFormField(
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Matière*',
-                      hintText: 'Nom de la matière'),
+                      hintText: 'Nom de la matière',
+                      labelStyle: TextStyle(color: _primaryColor),
+                    ),
                     onChanged: (val) => matiere = val,
                   ),
                   const SizedBox(height: 8),
+                  
+                  if (selectedFiles.isNotEmpty) ...[
+                    Text('Fichiers attachés:', 
+                        style: TextStyle(fontWeight: FontWeight.bold, color: _primaryColor)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: selectedFiles.asMap().entries.map((entry) {
+                        return SizedBox(
+                          width: 150,
+                          child: _buildFileItemWithDelete(
+                            entry.value,
+                            () => setState(() => selectedFiles.removeAt(entry.key)),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  
                   ElevatedButton.icon(
-                    icon: const Icon(Icons.attach_file),
-                    label: Text(coursFileName.isEmpty 
-                        ? 'Choisir fichier cours (optionnel)' 
-                        : coursFileName),
+                    icon: Icon(Icons.attach_file, color: _primaryColor),
+                    label: Text('Ajouter des fichiers', style: TextStyle(color: _primaryColor)),
+                    style: ElevatedButton.styleFrom(
+                      side: BorderSide(color: _primaryColor),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
                     onPressed: () async {
-                      final result = await FilePicker.platform.pickFiles();
-                      if (result != null && result.files.single.bytes != null) {
-                        coursFichierBase64 = base64Encode(result.files.single.bytes!);
-                        coursFileName = result.files.single.name;
-                        setState(() {});
+                      final result = await FilePicker.platform.pickFiles(allowMultiple: true);
+                      if (result != null && result.files.isNotEmpty) {
+                        final newFiles = result.files
+                            .where((file) => file.bytes != null)
+                            .map((file) => {
+                              'fileName': file.name,
+                              'base64': base64Encode(file.bytes!),
+                            })
+                            .toList();
+                        setState(() => selectedFiles.addAll(newFiles));
                       }
                     },
                   ),
-                  if (coursFileName.isNotEmpty)
-                    _buildFilePreview(coursFichierBase64, coursFileName),
                   
                   const SizedBox(height: 16),
                   
@@ -267,32 +317,44 @@ class _ClasseDetailPageState extends State<ClasseDetailPage> {
                         showExerciseFields = !showExerciseFields;
                       });
                     },
+                    style: ElevatedButton.styleFrom(
+                      side: BorderSide(color: _primaryColor),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
                     child: Text(showExerciseFields 
                         ? 'Masquer les champs d\'exercice' 
-                        : 'Associer un exercice'),
+                        : 'Associer un exercice', style: TextStyle(color: _primaryColor)),
                   ),
                   
                   if (showExerciseFields) ...[
                     const Divider(),
-                    const Text('Exercice associé', 
-                        style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text('Exercice associé', 
+                        style: TextStyle(fontWeight: FontWeight.bold, color: _primaryColor)),
                     TextFormField(
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Contenu de l\'exercice (optionnel)',
-                        hintText: 'Description de l\'exercice'),
+                        hintText: 'Description de l\'exercice',
+                        labelStyle: TextStyle(color: _primaryColor),
+                      ),
                       onChanged: (val) => exerciceContenu = val,
                     ),
                     TextFormField(
                       initialValue: date,
-                      decoration: const InputDecoration(
-                        labelText: 'Date de publication'),
+                      decoration: InputDecoration(
+                        labelText: 'Date de publication',
+                        labelStyle: TextStyle(color: _primaryColor),
+                      ),
                       onChanged: (val) => date = val,
                     ),
                     ElevatedButton.icon(
-                      icon: const Icon(Icons.attach_file),
+                      icon: Icon(Icons.attach_file, color: _primaryColor),
                       label: Text(exerciceFileName.isEmpty 
                           ? 'Choisir fichier exercice (optionnel)' 
-                          : exerciceFileName),
+                          : exerciceFileName, style: TextStyle(color: _primaryColor)),
+                      style: ElevatedButton.styleFrom(
+                        side: BorderSide(color: _primaryColor),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
                       onPressed: () async {
                         final result = await FilePicker.platform.pickFiles();
                         if (result != null && result.files.single.bytes != null) {
@@ -303,19 +365,19 @@ class _ClasseDetailPageState extends State<ClasseDetailPage> {
                       },
                     ),
                     if (exerciceFileName.isNotEmpty)
-                      _buildFilePreview(exerciceFichierBase64, exerciceFileName),
+                      _buildSingleFilePreview(exerciceFichierBase64, exerciceFileName),
                   ],
                   
                   const SizedBox(height: 8),
-                  const Text('* Champs obligatoires', 
-                      style: TextStyle(fontStyle: FontStyle.italic)),
+                  Text('* Champs obligatoires', 
+                      style: TextStyle(fontStyle: FontStyle.italic, color: _primaryColor)),
                 ],
               ),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text('Annuler'),
+                child: Text('Annuler', style: TextStyle(color: _primaryColor)),
               ),
               ElevatedButton(
                 onPressed: () async {
@@ -329,6 +391,11 @@ class _ClasseDetailPageState extends State<ClasseDetailPage> {
                   setState(() => _isLoading = true);
 
                   try {
+                    // Combine multiple files into single string
+                    final filesString = selectedFiles
+                      .map((f) => f['base64'])
+                      .join(_fileSeparator);
+
                     final coursResponse = await http.post(
                       Uri.parse('http://localhost:8004/api/cours'),
                       headers: {
@@ -337,8 +404,8 @@ class _ClasseDetailPageState extends State<ClasseDetailPage> {
                       },
                       body: jsonEncode({
                         "matiere": matiere,
-                        "fichier": coursFichierBase64.isNotEmpty 
-                            ? coursFichierBase64 
+                        "fichier": filesString.isNotEmpty 
+                            ? filesString 
                             : "no content",
                         "exerciceIds": [],
                       }),
@@ -348,26 +415,42 @@ class _ClasseDetailPageState extends State<ClasseDetailPage> {
                       final cours = jsonDecode(coursResponse.body);
                       final coursId = cours['id'];
 
-                      if (showExerciseFields) {
-                        final exerciceJson = {
-                          "contenu": exerciceContenu.isNotEmpty 
-                              ? exerciceContenu 
-                              : "no content",
-                          "datePublication": date,
-                          "fichier": exerciceFichierBase64.isNotEmpty
-                              ? exerciceFichierBase64
-                              : "no content",
-                          "classeIds": [widget.classeId],
-                          "courId": coursId
-                        };
+                      // Créer un exercice par défaut dans tous les cas
+                      final exerciceJson = {
+                        "contenu": exerciceContenu.isNotEmpty 
+                            ? exerciceContenu 
+                            : "pas de contenu",
+                        "datePublication": date,
+                        "fichier": exerciceFichierBase64.isNotEmpty
+                            ? exerciceFichierBase64
+                            : "no content",
+                        "classeIds": [widget.classeId],
+                        "courId": coursId
+                      };
 
-                        await http.post(
-                          Uri.parse('http://localhost:8004/api/exercices'),
+                      final exerciceResponse = await http.post(
+                        Uri.parse('http://localhost:8004/api/exercices'),
+                        headers: {
+                          'Authorization': 'Bearer ${widget.token}',
+                          'Content-Type': 'application/json',
+                        },
+                        body: jsonEncode(exerciceJson),
+                      );
+
+                      if (exerciceResponse.statusCode == 200 || exerciceResponse.statusCode == 201) {
+                        // Mettre à jour le cours avec l'ID de l'exercice créé
+                        final exerciceId = jsonDecode(exerciceResponse.body)['id'];
+                        await http.put(
+                          Uri.parse('http://localhost:8004/api/cours/$coursId'),
                           headers: {
                             'Authorization': 'Bearer ${widget.token}',
                             'Content-Type': 'application/json',
                           },
-                          body: jsonEncode(exerciceJson),
+                          body: jsonEncode({
+                            "matiere": matiere,
+                            "fichier": filesString.isNotEmpty ? filesString : "no content",
+                            "exerciceIds": [exerciceId],
+                          }),
                         );
                       }
 
@@ -382,9 +465,10 @@ class _ClasseDetailPageState extends State<ClasseDetailPage> {
                     setState(() => _isLoading = false);
                   }
                 },
+                style: ElevatedButton.styleFrom(backgroundColor: _primaryColor),
                 child: _isLoading
-                    ? const CircularProgressIndicator()
-                    : const Text('Créer'),
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : Text('Créer', style: TextStyle(color: Colors.white)),
               ),
             ],
           );
@@ -395,10 +479,20 @@ class _ClasseDetailPageState extends State<ClasseDetailPage> {
 
   void _showCourseDialog({Map<String, dynamic>? existingCourse}) {
     String matiere = existingCourse?['matiere'] ?? '';
-    String fichierBase64 = existingCourse?['fichier'] ?? '';
-    String fileName = fichierBase64.isNotEmpty && fichierBase64 != "no content" 
-        ? 'cours_${existingCourse?['id']}.${_getFileExtension(fichierBase64)}' 
-        : '';
+    List<Map<String, dynamic>> selectedFiles = [];
+    
+    // Parse existing files if any
+    if (existingCourse != null && 
+        existingCourse['fichier'] != null &&
+        existingCourse['fichier'] != "no content") {
+      final fileParts = existingCourse['fichier'].split(_fileSeparator);
+      for (var i = 0; i < fileParts.length; i++) {
+        selectedFiles.add({
+          'base64': fileParts[i],
+          'fileName': 'cours_${existingCourse['id']}_$i.${_getFileExtension(fileParts[i])}'
+        });
+      }
+    }
 
     showDialog(
       context: context,
@@ -416,29 +510,44 @@ class _ClasseDetailPageState extends State<ClasseDetailPage> {
                     onChanged: (val) => matiere = val,
                   ),
                   const SizedBox(height: 8),
+                  
+                  if (selectedFiles.isNotEmpty) ...[
+                    const Text('Fichiers attachés:'),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: selectedFiles.asMap().entries.map((entry) {
+                        return SizedBox(
+                          width: 150,
+                          child: _buildFileItemWithDelete(
+                            entry.value,
+                            () => setState(() => selectedFiles.removeAt(entry.key)),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  
                   ElevatedButton.icon(
                     icon: const Icon(Icons.attach_file),
-                    label: Text(fileName.isEmpty ? 'Choisir un fichier (optionnel)' : fileName),
+                    label: const Text('Ajouter des fichiers'),
                     onPressed: () async {
-                      final result = await FilePicker.platform.pickFiles();
-                      if (result != null && result.files.single.bytes != null) {
-                        fichierBase64 = base64Encode(result.files.single.bytes!);
-                        fileName = result.files.single.name;
-                        setState(() {});
+                      final result = await FilePicker.platform.pickFiles(allowMultiple: true);
+                      if (result != null && result.files.isNotEmpty) {
+                        final newFiles = result.files
+                            .where((file) => file.bytes != null)
+                            .map((file) => {
+                              'fileName': file.name,
+                              'base64': base64Encode(file.bytes!),
+                            })
+                            .toList();
+                        setState(() => selectedFiles.addAll(newFiles));
                       }
                     },
                   ),
-                  if (fileName.isNotEmpty)
-                    _buildFilePreview(fichierBase64, fileName),
-                  if (existingCourse != null && existingCourse['fichier'] != "no content")
-                    TextButton(
-                      onPressed: () {
-                        fichierBase64 = "no content";
-                        fileName = '';
-                        setState(() {});
-                      },
-                      child: const Text('Supprimer le fichier', style: TextStyle(color: Colors.red)),
-                    ),
+                  
                   const SizedBox(height: 8),
                   const Text('* Champs obligatoires', 
                       style: TextStyle(fontStyle: FontStyle.italic)),
@@ -462,6 +571,11 @@ class _ClasseDetailPageState extends State<ClasseDetailPage> {
                   setState(() => _isLoading = true);
 
                   try {
+                    // Combine multiple files into single string
+                    final filesString = selectedFiles
+                      .map((f) => f['base64'])
+                      .join(_fileSeparator);
+
                     if (existingCourse == null) {
                       final response = await http.post(
                         Uri.parse('http://localhost:8004/api/cours'),
@@ -471,7 +585,7 @@ class _ClasseDetailPageState extends State<ClasseDetailPage> {
                         },
                         body: jsonEncode({
                           "matiere": matiere,
-                          "fichier": fichierBase64.isNotEmpty ? fichierBase64 : "no content",
+                          "fichier": filesString.isNotEmpty ? filesString : "no content",
                           "exerciceIds": [],
                         }),
                       );
@@ -479,15 +593,50 @@ class _ClasseDetailPageState extends State<ClasseDetailPage> {
                       if (response.statusCode == 200 || response.statusCode == 201) {
                         final cours = jsonDecode(response.body);
                         final coursId = cours['id'];
+
+                        // Créer un exercice par défaut
+                        final exerciceJson = {
+                          "contenu": "pas de contenu",
+                          "datePublication": DateTime.now().toIso8601String().substring(0, 10),
+                          "fichier": "no content",
+                          "classeIds": [widget.classeId],
+                          "courId": coursId
+                        };
+
+                        final exerciceResponse = await http.post(
+                          Uri.parse('http://localhost:8004/api/exercices'),
+                          headers: {
+                            'Authorization': 'Bearer ${widget.token}',
+                            'Content-Type': 'application/json',
+                          },
+                          body: jsonEncode(exerciceJson),
+                        );
+
+                        if (exerciceResponse.statusCode == 200 || exerciceResponse.statusCode == 201) {
+                          final exerciceId = jsonDecode(exerciceResponse.body)['id'];
+                          await http.put(
+                            Uri.parse('http://localhost:8004/api/cours/$coursId'),
+                            headers: {
+                              'Authorization': 'Bearer ${widget.token}',
+                              'Content-Type': 'application/json',
+                            },
+                            body: jsonEncode({
+                              "matiere": matiere,
+                              "fichier": filesString.isNotEmpty ? filesString : "no content",
+                              "exerciceIds": [exerciceId],
+                            }),
+                          );
+                        }
+
                         Navigator.pop(ctx);
                         _fetchCoursesForClasse();
                       }
                     } else {
                       final updated = {
                         "matiere": matiere,
-                        "fichier": fichierBase64.isNotEmpty 
-                            ? fichierBase64 
-                            : existingCourse['fichier'],
+                        "fichier": filesString.isNotEmpty 
+                            ? filesString 
+                            : "no content",
                         "exerciceIds": existingCourse['exerciceIds'] ?? [],
                       };
 
@@ -525,16 +674,17 @@ class _ClasseDetailPageState extends State<ClasseDetailPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Confirmation'),
-        content: const Text('Voulez-vous vraiment supprimer ce cours ?'),
+        title: Text('Confirmation', style: TextStyle(color: _primaryColor, fontWeight: FontWeight.bold)),
+        content: Text('Voulez-vous vraiment supprimer ce cours ?', style: TextStyle(color: _primaryColor)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Annuler'),
+            child: Text('Annuler', style: TextStyle(color: _primaryColor)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Supprimer', style: TextStyle(color: Colors.red)),
+            style: ElevatedButton.styleFrom(backgroundColor: _primaryColor),
+            child: Text('Supprimer', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -569,25 +719,34 @@ class _ClasseDetailPageState extends State<ClasseDetailPage> {
       builder: (ctx) => StatefulBuilder(
         builder: (context, setState) {
           return AlertDialog(
-            title: const Text('Ajouter un exercice'),
+            title: Text('Ajouter un exercice', style: TextStyle(color: _primaryColor, fontWeight: FontWeight.bold)),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   TextFormField(
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Contenu (optionnel)',
-                      hintText: 'Description de l\'exercice'),
+                      hintText: 'Description de l\'exercice',
+                      labelStyle: TextStyle(color: _primaryColor),
+                    ),
                     onChanged: (val) => contenu = val,
                   ),
                   TextFormField(
                     initialValue: date,
-                    decoration: const InputDecoration(labelText: 'Date de publication'),
+                    decoration: InputDecoration(
+                      labelText: 'Date de publication',
+                      labelStyle: TextStyle(color: _primaryColor),
+                    ),
                     onChanged: (val) => date = val,
                   ),
                   ElevatedButton.icon(
-                    icon: const Icon(Icons.attach_file),
-                    label: Text(fileName.isEmpty ? 'Choisir un fichier (optionnel)' : fileName),
+                    icon: Icon(Icons.attach_file, color: _primaryColor),
+                    label: Text(fileName.isEmpty ? 'Choisir un fichier (optionnel)' : fileName, style: TextStyle(color: _primaryColor)),
+                    style: ElevatedButton.styleFrom(
+                      side: BorderSide(color: _primaryColor),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
                     onPressed: () async {
                       final result = await FilePicker.platform.pickFiles();
                       if (result != null && result.files.single.bytes != null) {
@@ -598,14 +757,14 @@ class _ClasseDetailPageState extends State<ClasseDetailPage> {
                     },
                   ),
                   if (fileName.isNotEmpty)
-                    _buildFilePreview(fichierBase64, fileName),
+                    _buildSingleFilePreview(fichierBase64, fileName),
                 ],
               ),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text('Annuler'),
+                child: Text('Annuler', style: TextStyle(color: _primaryColor)),
               ),
               ElevatedButton(
                 onPressed: () async {
@@ -618,7 +777,7 @@ class _ClasseDetailPageState extends State<ClasseDetailPage> {
                         'Content-Type': 'application/json',
                       },
                       body: jsonEncode({
-                        "contenu": contenu.isNotEmpty ? contenu : "no content",
+                        "contenu": contenu.isNotEmpty ? contenu : "pas de contenu",
                         "datePublication": date,
                         "fichier": fichierBase64.isNotEmpty ? fichierBase64 : "no content",
                         "classeIds": [widget.classeId],
@@ -640,9 +799,10 @@ class _ClasseDetailPageState extends State<ClasseDetailPage> {
                     setState(() => _isLoading = false);
                   }
                 },
+                style: ElevatedButton.styleFrom(backgroundColor: _primaryColor),
                 child: _isLoading
-                    ? const CircularProgressIndicator()
-                    : const Text('Ajouter'),
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : Text('Ajouter', style: TextStyle(color: Colors.white)),
               ),
             ],
           );
@@ -652,14 +812,29 @@ class _ClasseDetailPageState extends State<ClasseDetailPage> {
   }
 
   Widget _buildCourseCard(Map<String, dynamic> cours) {
-    final hasFile = cours['fichier'] != null && cours['fichier'] != "no content";
-    final fileName = hasFile ? 'cours_${cours['id']}.${_getFileExtension(cours['fichier'])}' : '';
+    // Check if there are files
+    final hasFiles = cours['fichier'] != null && 
+                    cours['fichier'] != "no content" &&
+                    cours['fichier'].isNotEmpty;
+
+    List<Widget> filePreviews = [];
+    
+    if (hasFiles) {
+      final fileParts = cours['fichier'].split(_fileSeparator);
+      for (var i = 0; i < fileParts.length; i++) {
+        final base64 = fileParts[i];
+        final fileName = 'cours_${cours['id']}_$i.${_getFileExtension(base64)}';
+        filePreviews.add(_buildSingleFilePreview(base64, fileName));
+      }
+    }
 
     return Card(
-      margin: const EdgeInsets.all(8),
-      elevation: 3,
+      margin: const EdgeInsets.all(12),
+      elevation: 6,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      color: Colors.white,
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -669,9 +844,10 @@ class _ClasseDetailPageState extends State<ClasseDetailPage> {
                 Expanded(
                   child: Text(
                     cours['matiere'],
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      fontSize: 18,
+                      fontSize: 20,
+                      color: _primaryColor,
                     ),
                   ),
                 ),
@@ -679,12 +855,12 @@ class _ClasseDetailPageState extends State<ClasseDetailPage> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.edit, color: Colors.blue),
+                      icon: Icon(Icons.edit, color: _blueShade700),
                       onPressed: () => _showCourseDialog(existingCourse: cours),
                       tooltip: 'Modifier le cours',
                     ),
                     IconButton(
-                      icon: const Icon(Icons.delete, color: Colors.red),
+                      icon: Icon(Icons.delete, color: _redShade400),
                       onPressed: () => _deleteCourse(cours['id']),
                       tooltip: 'Supprimer',
                     ),
@@ -692,34 +868,76 @@ class _ClasseDetailPageState extends State<ClasseDetailPage> {
                 ),
               ],
             ),
-            Text('ID: ${cours['id']}'),
-            if (hasFile) 
-              _buildFilePreview(cours['fichier'], fileName),
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
+            Text(
+              'ID: ${cours['id']}',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade600,
+              ),
+            ),
+            if (hasFiles) ...[
+              const SizedBox(height: 12),
+              Text(
+                'Fichiers:',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: _primaryColor,
+                ),
+              ),
+              const SizedBox(height: 8),
+              filePreviews.length == 1
+                  ? Center(child: filePreviews.first)
+                  : SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: filePreviews.map((preview) => Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: preview,
+                        )).toList(),
+                      ),
+                    ),
+            ],
+            const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.add_circle),
-                  label: const Text('Ajouter exercice'),
-                  onPressed: () => _showAddExerciseDialog(cours['id']),
+                Padding(
+                  padding: const EdgeInsets.only(right: 4), // Move "Ajouter exercice" slightly left
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.add_circle, color: Colors.white),
+                    label: const Text('Ajouter exercice', style: TextStyle(color: Colors.white)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _primaryColor,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    onPressed: () => _showAddExerciseDialog(cours['id']),
+                  ),
                 ),
                 const SizedBox(width: 8),
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.list),
-                  label: const Text('Voir exercices'),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ExercicesPage(
-                          courId: cours['id'],
-                          token: widget.token,
-                          classeId: widget.classeId,
+                SizedBox(
+                  width: 130, // Increased width to accommodate icon
+                  child: OutlinedButton.icon(
+                    icon: Icon(Icons.assignment, color: _primaryColor, size: 24),
+                    label: const SizedBox.shrink(), // Remove text label
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: _primaryColor),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ExercicesPage(
+                            courId: cours['id'],
+                            token: widget.token,
+                            classeId: widget.classeId,
+                          ),
                         ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
               ],
             ),
@@ -733,50 +951,76 @@ class _ClasseDetailPageState extends State<ClasseDetailPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Classe: $_niveau'),
+        title: Text(
+          'Classe: $_niveau',
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: _primaryColor,
+        elevation: 4,
         actions: [
           IconButton(
             onPressed: _showAddCourseWithExerciseDialog,
-            icon: const Icon(Icons.add_box),
+            icon: const Icon(Icons.add_box, color: Colors.white),
             tooltip: 'Ajouter cours avec exercice',
           ),
           IconButton(
-            onPressed: () => _showCourseDialog(),
-            icon: const Icon(Icons.add),
-            tooltip: 'Ajouter un cours simple',
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: _fetchCoursesForClasse,
             tooltip: 'Actualiser',
           ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error.isNotEmpty
-              ? Center(child: Text(_error))
-              : _cours.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Text('Aucun cours trouvé', style: TextStyle(fontSize: 18)),
-                          const SizedBox(height: 20),
-                          ElevatedButton(
-                            onPressed: _showAddCourseWithExerciseDialog,
-                            child: const Text('Ajouter un cours'),
-                          ),
-                        ],
-                      ),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: _fetchCoursesForClasse,
-                      child: ListView.builder(
-                        itemCount: _cours.length,
-                        itemBuilder: (context, index) => _buildCourseCard(_cours[index]),
-                      ),
+      body: Container(
+        color: Colors.grey.shade50,
+        child: _loading
+            ? Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(_primaryColor),
+                ),
+              )
+            : _error.isNotEmpty
+                ? Center(
+                    child: Text(
+                      _error,
+                      style: TextStyle(color: Colors.red.shade700, fontSize: 16),
                     ),
+                  )
+                : _cours.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              'Aucun cours trouvé',
+                              style: TextStyle(
+                                fontSize: 20,
+                                color: Colors.grey.shade600,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _primaryColor,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                              ),
+                              onPressed: _showAddCourseWithExerciseDialog,
+                              child: const Text('Ajouter un cours', style: TextStyle(color: Colors.white)),
+                            ),
+                          ],
+                        ),
+                      )
+                    : RefreshIndicator(
+                        onRefresh: _fetchCoursesForClasse,
+                        color: _primaryColor,
+                        child: ListView.builder(
+                          padding: const EdgeInsets.all(12),
+                          itemCount: _cours.length,
+                          itemBuilder: (context, index) => _buildCourseCard(_cours[index]),
+                        ),
+                      ),
+      ),
     );
   }
 }

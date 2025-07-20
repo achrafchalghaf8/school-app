@@ -19,7 +19,6 @@ class _LoginPageState extends State<LoginPage> {
   bool _isLoading = false;
   bool _rememberMe = false;
 
-  // Méthode pour sauvegarder les informations utilisateur dans le localStorage
   Future<void> _saveUserData(User user) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('userId', user.id);
@@ -37,7 +36,6 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  // Méthode pour charger les identifiants enregistrés
   Future<void> _loadSavedCredentials() async {
     final prefs = await SharedPreferences.getInstance();
     final savedEmail = prefs.getString('savedEmail');
@@ -69,10 +67,8 @@ class _LoginPageState extends State<LoginPage> {
         _passwordController.text.trim(),
       );
 
-      // Sauvegarder les données utilisateur
       await _saveUserData(user);
 
-      // Role-based redirection
       if (user.role == 'ADMIN') {
         Navigator.pushReplacementNamed(context, '/admin');
       } else if (user.role == 'PARENT') {
@@ -87,7 +83,6 @@ class _LoginPageState extends State<LoginPage> {
           },
         );
       } else {
-        // Fallback: redirection générique
         Navigator.pushReplacementNamed(context, '/login');
       }
     } catch (e) {
@@ -95,11 +90,17 @@ class _LoginPageState extends State<LoginPage> {
         SnackBar(
           content: Text(
             e.toString(),
-            style: const TextStyle(color: Colors.white),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
           ),
           backgroundColor: Colors.redAccent,
           behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 3),
         ),
       );
     } finally {
@@ -110,7 +111,7 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.blue[50],
+      backgroundColor: Colors.blue.shade50,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -127,23 +128,22 @@ class _LoginPageState extends State<LoginPage> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // School Logo
                       Image.asset(
                         'assets/images/school_logo.png',
                         height: 100,
-                        errorBuilder: (context, error, stackTrace) => const Icon(
+                        errorBuilder: (context, error, stackTrace) => Icon(
                           Icons.school,
                           size: 80,
-                          color: Colors.blue,
+                          color: Colors.blue.shade900,
                         ),
                       ),
                       const SizedBox(height: 16),
-                      const Text(
+                      Text(
                         'SchoolHub',
                         style: TextStyle(
                           fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blue,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.blue.shade900,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -151,21 +151,36 @@ class _LoginPageState extends State<LoginPage> {
                         'Connectez-vous à votre compte',
                         style: TextStyle(
                           fontSize: 16,
+                          fontWeight: FontWeight.w500,
                           color: Colors.grey,
                         ),
                       ),
                       const SizedBox(height: 24),
-                      // Email Field
                       TextFormField(
                         controller: _emailController,
                         decoration: InputDecoration(
                           labelText: 'Email',
-                          prefixIcon: const Icon(Icons.email, color: Colors.blue),
+                          labelStyle: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey[800],
+                          ),
+                          prefixIcon: Icon(Icons.email, color: Colors.blue.shade900, size: 24),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.grey[300]!),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.blue.shade900),
                           ),
                           filled: true,
                           fillColor: Colors.white,
+                          errorStyle: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w400,
+                            color: Colors.grey,
+                          ),
                         ),
                         keyboardType: TextInputType.emailAddress,
                         validator: (value) {
@@ -179,17 +194,31 @@ class _LoginPageState extends State<LoginPage> {
                         },
                       ),
                       const SizedBox(height: 16),
-                      // Password Field
                       TextFormField(
                         controller: _passwordController,
                         decoration: InputDecoration(
                           labelText: 'Mot de passe',
-                          prefixIcon: const Icon(Icons.lock, color: Colors.blue),
+                          labelStyle: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.grey[800],
+                          ),
+                          prefixIcon: Icon(Icons.lock, color: Colors.blue.shade900, size: 24),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.grey[300]!),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.blue.shade900),
                           ),
                           filled: true,
                           fillColor: Colors.white,
+                          errorStyle: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w400,
+                            color: Colors.grey,
+                          ),
                         ),
                         obscureText: true,
                         validator: (value) {
@@ -202,7 +231,7 @@ class _LoginPageState extends State<LoginPage> {
                           return null;
                         },
                       ),
-                      // Remember me checkbox
+                      const SizedBox(height: 16),
                       Row(
                         children: [
                           Checkbox(
@@ -213,54 +242,77 @@ class _LoginPageState extends State<LoginPage> {
                               });
                             },
                           ),
-                          const Text('Se souvenir de moi'),
+                          Text(
+                            'Se souvenir de moi',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey[800],
+                            ),
+                          ),
                         ],
                       ),
-                      // Forgot Password Link
                       Align(
                         alignment: Alignment.centerRight,
                         child: TextButton(
                           onPressed: () {
                             Navigator.pushNamed(context, '/forgot-password');
                           },
-                          child: const Text(
+                          child: Text(
                             'Mot de passe oublié ?',
-                            style: TextStyle(color: Colors.blue),
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.blue.shade900,
+                            ),
                           ),
                         ),
                       ),
                       const SizedBox(height: 24),
-                      // Login Button
                       _isLoading
-                          ? const CircularProgressIndicator()
+                          ? CircularProgressIndicator(color: Colors.blue.shade900)
                           : ElevatedButton(
                               onPressed: _login,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blue,
+                                backgroundColor: Colors.blue.shade900,
                                 foregroundColor: Colors.white,
                                 minimumSize: const Size(double.infinity, 50),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
+                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                               ),
                               child: const Text(
                                 'Se connecter',
-                                style: TextStyle(fontSize: 16),
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w400,
+                                ),
                               ),
                             ),
                       const SizedBox(height: 16),
-                      // Sign Up Link
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Text('Pas de compte ? '),
+                          Text(
+                            'Pas de compte ? ',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey[800],
+                            ),
+                          ),
                           TextButton(
                             onPressed: () {
                               Navigator.pushNamed(context, '/signup');
                             },
-                            child: const Text(
+                            child: Text(
                               'Inscrivez-vous',
-                              style: TextStyle(color: Colors.blue),
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.blue.shade900,
+                              ),
                             ),
                           ),
                         ],

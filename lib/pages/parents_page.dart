@@ -14,17 +14,31 @@ class ParentsPage extends StatefulWidget {
 class _ParentsPageState extends State<ParentsPage> {
   List<dynamic> parents = [];
   bool isLoading = true;
+  bool hasError = false;
   final String apiUrl = "http://localhost:8004/api/parents";
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     fetchParents();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged() {
+    // Implémentation de la recherche
   }
 
   Future<void> fetchParents() async {
     setState(() {
       isLoading = true;
+      hasError = false;
     });
     try {
       final response = await http.get(Uri.parse(apiUrl));
@@ -39,10 +53,9 @@ class _ParentsPageState extends State<ParentsPage> {
     } catch (e) {
       setState(() {
         isLoading = false;
+        hasError = true;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${e.toString()}')),
-      );
+      _showErrorSnackBar(e.toString());
     }
   }
 
@@ -51,17 +64,39 @@ class _ParentsPageState extends State<ParentsPage> {
       final response = await http.delete(Uri.parse('$apiUrl/$id'));
       if (response.statusCode == 204) {
         fetchParents();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Parent supprimé avec succès')),
-        );
+        _showSuccessSnackBar('Parent supprimé avec succès');
       } else {
         throw Exception('Failed to delete parent');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${e.toString()}')),
-      );
+      _showErrorSnackBar(e.toString());
     }
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Erreur: $message'),
+        backgroundColor: Colors.redAccent,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
+    );
+  }
+
+  void _showSuccessSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green.shade600,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
+    );
   }
 
   void showAddEditParentDialog({Map<String, dynamic>? parent}) {
@@ -87,18 +122,16 @@ class _ParentsPageState extends State<ParentsPage> {
 
               if (response.statusCode == 201 || response.statusCode == 200) {
                 fetchParents();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(parent == null 
+                _showSuccessSnackBar(
+                  parent == null 
                       ? 'Parent ajouté avec succès' 
-                      : 'Parent modifié avec succès')),
+                      : 'Parent modifié avec succès'
                 );
               } else {
                 throw Exception('Failed to save parent');
               }
             } catch (e) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Error: ${e.toString()}')),
-              );
+              _showErrorSnackBar(e.toString());
             }
           },
         );
@@ -106,88 +139,218 @@ class _ParentsPageState extends State<ParentsPage> {
     );
   }
 
+  void _showDeleteConfirmation(int parentId) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        backgroundColor: Colors.white,
+        title: Text(
+          'Confirmer la suppression',
+          style: TextStyle(
+            color: Colors.blue.shade900,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: const Text('Voulez-vous vraiment supprimer ce parent ?'),
+        actions: [
+          TextButton(
+            child: const Text('Annuler', style: TextStyle(color: Colors.grey)),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            ),
+            child: const Text('Supprimer', style: TextStyle(fontWeight: FontWeight.w600)),
+            onPressed: () {
+              Navigator.of(context).pop();
+              deleteParent(parentId);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Gestion des Parents'),
+        backgroundColor: Colors.blue.shade900,
+        title: const Text(
+          'Gestion des Parents',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        elevation: 4,
+        shadowColor: Colors.black26,
         actions: [
           IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () => showAddEditParentDialog(),
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: fetchParents,
+            tooltip: 'Actualiser',
           ),
         ],
       ),
       drawer: const AdminDrawer(),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : parents.isEmpty
-              ? const Center(child: Text('Aucun parent trouvé'))
-              : ListView.builder(
-                  itemCount: parents.length,
-                  itemBuilder: (context, index) {
-                    final parent = parents[index];
-                    return Card(
-                      margin: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 5),
-                      child: ListTile(
-                        title: Text(parent['nom']),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(parent['email']),
-                            Text('Tél: ${parent['telephone']}'),
-                          ],
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.edit, color: Colors.blue),
-                              onPressed: () =>
-                                  showAddEditParentDialog(parent: parent),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () {
-                                showDialog(
-                                  context: context,
-                                  builder: (BuildContext context) {
-                                    return AlertDialog(
-                                      title: const Text('Confirmer la suppression'),
-                                      content: const Text(
-                                          'Voulez-vous vraiment supprimer ce parent ?'),
-                                      actions: [
-                                        TextButton(
-                                          child: const Text('Annuler'),
-                                          onPressed: () =>
-                                              Navigator.of(context).pop(),
-                                        ),
-                                        TextButton(
-                                          child: const Text('Supprimer'),
-                                          onPressed: () {
-                                            Navigator.of(context).pop();
-                                            deleteParent(parent['id']);
-                                          },
-                                        ),
-                                      ],
-                                    );
-                                  },
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                        onTap: () =>
-                            showAddEditParentDialog(parent: parent),
-                      ),
-                    );
-                  },
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  labelText: 'Rechercher un parent',
+                  prefixIcon: Icon(Icons.search, color: Colors.blue.shade900),
+                  suffixIcon: IconButton(
+                    icon: Icon(Icons.clear, color: Colors.blue.shade900),
+                    onPressed: () {
+                      _searchController.clear();
+                      fetchParents();
+                    },
+                  ),
+                  filled: true,
+                  fillColor: Colors.blue.shade50,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.blue.shade900.withOpacity(0.2)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.blue.shade900, width: 2),
+                  ),
                 ),
+              ),
+            ),
+            Expanded(
+              child: _buildParentList(),
+            ),
+          ],
+        ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: Colors.blue.shade900,
+        foregroundColor: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        elevation: 6,
+        onPressed: () => showAddEditParentDialog(),
+        child: const Icon(Icons.add, size: 28),
+        tooltip: 'Ajouter un parent',
+      ),
+    );
+  }
+
+  Widget _buildParentList() {
+    if (isLoading) {
+      return Center(child: CircularProgressIndicator(color: Colors.blue.shade900));
+    }
+
+    if (hasError) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('Erreur de chargement', style: TextStyle(color: Colors.redAccent)),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue.shade900,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+              onPressed: fetchParents,
+              child: const Text('Réessayer'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (parents.isEmpty) {
+      return const Center(child: Text('Aucun parent trouvé', style: TextStyle(color: Colors.grey)));
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      itemCount: parents.length,
+      itemBuilder: (context, index) {
+        final parent = parents[index];
+        return Card(
+          elevation: 4,
+          margin: const EdgeInsets.symmetric(vertical: 6),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            leading: CircleAvatar(
+              radius: 24,
+              backgroundColor: Colors.blue.shade900,
+              child: Text(
+                parent['nom']?[0]?.toUpperCase() ?? 'P',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            title: Text(
+              parent['nom'] ?? '',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: Colors.blue.shade900,
+              ),
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 4),
+                Text(
+                  parent['email'] ?? '',
+                  style: TextStyle(color: Colors.grey.shade700),
+                ),
+                Text(
+                  'Tél: ${parent['telephone'] ?? ''}',
+                  style: TextStyle(color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: Icon(Icons.edit, color: Colors.blue.shade900),
+                  onPressed: () => showAddEditParentDialog(parent: parent),
+                  tooltip: 'Modifier',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.redAccent),
+                  onPressed: () => _showDeleteConfirmation(parent['id']),
+                  tooltip: 'Supprimer',
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

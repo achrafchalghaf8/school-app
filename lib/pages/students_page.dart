@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'admin_drawer.dart';
-import 'student_dialog.dart';
 
 class StudentsPage extends StatefulWidget {
   const StudentsPage({Key? key}) : super(key: key);
@@ -16,14 +15,27 @@ class _StudentsPageState extends State<StudentsPage> {
   List<dynamic> classes = [];
   List<dynamic> parents = [];
   bool isLoading = true;
+  bool showForm = false;
+  final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _nomController = TextEditingController();
+  final TextEditingController _prenomController = TextEditingController();
+  int? _selectedClassId;
+  int? _selectedParentId;
+  Map<String, dynamic>? _currentStudent;
   final String studentsApiUrl = "http://localhost:8004/api/etudiants";
   final String classesApiUrl = "http://localhost:8004/api/classes";
   final String parentsApiUrl = "http://localhost:8004/api/parents";
+  final _formKey = GlobalKey<FormState>();
 
   @override
   void initState() {
     super.initState();
     fetchData();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  void _onSearchChanged() {
+    // Implement search functionality if needed
   }
 
   Future<void> fetchData() async {
@@ -52,7 +64,14 @@ class _StudentsPageState extends State<StudentsPage> {
         isLoading = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${e.toString()}')),
+        SnackBar(
+          content: Text('Erreur: ${e.toString()}'),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
       );
     }
   }
@@ -63,60 +82,99 @@ class _StudentsPageState extends State<StudentsPage> {
       if (response.statusCode == 204) {
         fetchData();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Étudiant supprimé avec succès')),
+          SnackBar(
+            content: const Text('Étudiant supprimé avec succès'),
+            backgroundColor: Colors.green.shade600,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
         );
       } else {
         throw Exception('Failed to delete student');
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${e.toString()}')),
+        SnackBar(
+          content: Text('Erreur: ${e.toString()}'),
+          backgroundColor: Colors.redAccent,
+        ),
       );
     }
   }
 
-  void showAddEditStudentDialog({Map<String, dynamic>? student}) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return StudentDialog(
-          student: student,
-          classes: classes,
-          parents: parents,
-          onSave: (newStudent) async {
-            Navigator.of(context).pop();
-            try {
-              final response = student == null
-                  ? await http.post(
-                      Uri.parse(studentsApiUrl),
-                      headers: {'Content-Type': 'application/json'},
-                      body: json.encode(newStudent),
-                    )
-                  : await http.put(
-                      Uri.parse('$studentsApiUrl/${student['id']}'),
-                      headers: {'Content-Type': 'application/json'},
-                      body: json.encode(newStudent),
-                    );
+  void _toggleForm({Map<String, dynamic>? student}) {
+    setState(() {
+      showForm = !showForm;
+      _currentStudent = student;
+      if (student != null) {
+        _nomController.text = student['nom'];
+        _prenomController.text = student['prenom'];
+        _selectedClassId = student['classeId'];
+        _selectedParentId = student['parentId'];
+      } else {
+        _nomController.clear();
+        _prenomController.clear();
+        _selectedClassId = classes.isNotEmpty ? classes.first['id'] : null;
+        _selectedParentId = parents.isNotEmpty ? parents.first['id'] : null;
+      }
+    });
+  }
 
-              if (response.statusCode == 201 || response.statusCode == 200) {
-                fetchData();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(student == null 
-                      ? 'Étudiant ajouté avec succès' 
-                      : 'Étudiant modifié avec succès')),
-                );
-              } else {
-                throw Exception('Failed to save student');
-              }
-            } catch (e) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Error: ${e.toString()}')),
+  Future<void> _saveStudent() async {
+    if (_formKey.currentState!.validate()) {
+      final newStudent = {
+        'nom': _nomController.text,
+        'prenom': _prenomController.text,
+        'classeId': _selectedClassId,
+        'parentId': _selectedParentId,
+      };
+      
+      if (_currentStudent != null) {
+        newStudent['id'] = _currentStudent!['id'];
+      }
+
+      try {
+        final response = _currentStudent == null
+            ? await http.post(
+                Uri.parse(studentsApiUrl),
+                headers: {'Content-Type': 'application/json'},
+                body: json.encode(newStudent),
+              )
+            : await http.put(
+                Uri.parse('$studentsApiUrl/${_currentStudent!['id']}'),
+                headers: {'Content-Type': 'application/json'},
+                body: json.encode(newStudent),
               );
-            }
-          },
+
+        if (response.statusCode == 201 || response.statusCode == 200) {
+          fetchData();
+          _toggleForm();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(_currentStudent == null 
+                  ? 'Étudiant ajouté avec succès' 
+                  : 'Étudiant modifié avec succès'),
+              backgroundColor: Colors.green.shade600,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          );
+        } else {
+          throw Exception('Failed to save student');
+        }
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur: ${e.toString()}'),
+            backgroundColor: Colors.redAccent,
+          ),
         );
-      },
-    );
+      }
+    }
   }
 
   String getClassName(int classId) {
@@ -136,88 +194,325 @@ class _StudentsPageState extends State<StudentsPage> {
     }
   }
 
+  void _showDeleteConfirmationDialog(int studentId) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          backgroundColor: Colors.white,
+          title: Text(
+            'Confirmer la suppression',
+            style: TextStyle(
+              color: Colors.blue.shade900,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: const Text('Voulez-vous vraiment supprimer cet étudiant ?'),
+          actions: [
+            TextButton(
+              child: const Text('Annuler', style: TextStyle(color: Colors.grey)),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              ),
+              child: const Text('Supprimer', style: TextStyle(fontWeight: FontWeight.w600)),
+              onPressed: () {
+                Navigator.of(context).pop();
+                deleteStudent(studentId);
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildStudentForm() {
+    if (classes.isEmpty || parents.isEmpty) {
+      return const Center(child: Text('Données manquantes pour les classes ou les parents'));
+    }
+
+    return Card(
+      elevation: 4,
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _currentStudent == null ? 'Ajouter un étudiant' : 'Modifier étudiant',
+                style: TextStyle(
+                  color: Colors.blue.shade900,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _nomController,
+                decoration: InputDecoration(
+                  labelText: 'Nom',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  prefixIcon: Icon(Icons.person, color: Colors.blue.shade900),
+                  filled: true,
+                  fillColor: Colors.blue.shade50,
+                ),
+                validator: (value) => value?.isEmpty ?? true ? 'Champ requis' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _prenomController,
+                decoration: InputDecoration(
+                  labelText: 'Prénom',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  prefixIcon: Icon(Icons.person_outline, color: Colors.blue.shade900),
+                  filled: true,
+                  fillColor: Colors.blue.shade50,
+                ),
+                validator: (value) => value?.isEmpty ?? true ? 'Champ requis' : null,
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<int>(
+                value: _selectedClassId,
+                decoration: InputDecoration(
+                  labelText: 'Classe',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  prefixIcon: Icon(Icons.school, color: Colors.blue.shade900),
+                  filled: true,
+                  fillColor: Colors.blue.shade50,
+                ),
+                items: classes.map<DropdownMenuItem<int>>((classe) {
+                  return DropdownMenuItem<int>(
+                    value: classe['id'],
+                    child: Text(classe['niveau']),
+                  );
+                }).toList(),
+                onChanged: (value) => setState(() => _selectedClassId = value),
+                validator: (value) => value == null ? 'Sélection requise' : null,
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<int>(
+                value: _selectedParentId,
+                decoration: InputDecoration(
+                  labelText: 'Parent',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  prefixIcon: Icon(Icons.family_restroom, color: Colors.blue.shade900),
+                  filled: true,
+                  fillColor: Colors.blue.shade50,
+                ),
+                items: parents.map<DropdownMenuItem<int>>((parent) {
+                  return DropdownMenuItem<int>(
+                    value: parent['id'],
+                    child: Text('${parent['nom']} (${parent['email']})'),
+                  );
+                }).toList(),
+                onChanged: (value) => setState(() => _selectedParentId = value),
+                validator: (value) => value == null ? 'Sélection requise' : null,
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: _toggleForm,
+                    child: const Text('Annuler', style: TextStyle(color: Colors.grey)),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue.shade900,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    onPressed: _saveStudent,
+                    child: const Text('Enregistrer'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Gestion des Étudiants'),
+        backgroundColor: Colors.blue.shade900,
+        title: const Text(
+          'Gestion des Étudiants',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        elevation: 4,
+        shadowColor: Colors.black26,
         actions: [
           IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () => showAddEditStudentDialog(),
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: fetchData,
+            tooltip: 'Actualiser',
           ),
         ],
       ),
       drawer: const AdminDrawer(),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : students.isEmpty
-              ? const Center(child: Text('Aucun étudiant trouvé'))
-              : ListView.builder(
-                  itemCount: students.length,
-                  itemBuilder: (context, index) {
-                    final student = students[index];
-                    return Card(
-                      margin: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 5),
-                      child: ListTile(
-                        title: Text('${student['prenom']} ${student['nom']}'),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Classe: ${getClassName(student['classeId'])}'),
-                            Text('Parent: ${getParentName(student['parentId'])}'),
-                          ],
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.edit, color: Colors.blue),
-                              onPressed: () =>
-                                  showAddEditStudentDialog(student: student),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () {
-                                showDialog(
-                                  context: context,
-                                  builder: (BuildContext context) {
-                                    return AlertDialog(
-                                      title: const Text('Confirmer la suppression'),
-                                      content: const Text(
-                                          'Voulez-vous vraiment supprimer cet étudiant ?'),
-                                      actions: [
-                                        TextButton(
-                                          child: const Text('Annuler'),
-                                          onPressed: () =>
-                                              Navigator.of(context).pop(),
-                                        ),
-                                        TextButton(
-                                          child: const Text('Supprimer'),
-                                          onPressed: () {
-                                            Navigator.of(context).pop();
-                                            deleteStudent(student['id']);
-                                          },
-                                        ),
-                                      ],
-                                    );
-                                  },
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                        onTap: () =>
-                            showAddEditStudentDialog(student: student),
-                      ),
-                    );
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                labelText: 'Rechercher un étudiant',
+                prefixIcon: Icon(Icons.search, color: Colors.blue.shade900),
+                suffixIcon: IconButton(
+                  icon: Icon(Icons.clear, color: Colors.blue.shade900),
+                  onPressed: () {
+                    _searchController.clear();
+                    fetchData();
                   },
                 ),
+                filled: true,
+                fillColor: Colors.blue.shade50,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.blue.shade900.withOpacity(0.2)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.blue.shade900, width: 2),
+                ),
+              ),
+            ),
+          ),
+          if (showForm) _buildStudentForm(),
+          Expanded(
+            child: isLoading
+                ? Center(child: CircularProgressIndicator(color: Colors.blue.shade900))
+                : students.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'Aucun étudiant trouvé',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        itemCount: students.length,
+                        itemBuilder: (context, index) {
+                          final student = students[index];
+                          return Card(
+                            elevation: 4,
+                            margin: const EdgeInsets.symmetric(vertical: 6),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 12),
+                              leading: CircleAvatar(
+                                radius: 24,
+                                backgroundColor: Colors.blue.shade900,
+                                child: Text(
+                                  student['prenom'][0].toUpperCase(),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              title: Text(
+                                '${student['prenom']} ${student['nom']}',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.blue.shade900,
+                                ),
+                              ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Classe: ${getClassName(student['classeId'])}',
+                                    style: TextStyle(color: Colors.grey.shade700),
+                                  ),
+                                  Text(
+                                    'Parent: ${getParentName(student['parentId'])}',
+                                    style: TextStyle(color: Colors.grey.shade600),
+                                  ),
+                                ],
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: Icon(
+                                      Icons.edit,
+                                      color: Colors.blue.shade900,
+                                    ),
+                                    onPressed: () => _toggleForm(student: student),
+                                    tooltip: 'Modifier',
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.delete,
+                                      color: Colors.redAccent,
+                                    ),
+                                    onPressed: () => _showDeleteConfirmationDialog(student['id']),
+                                    tooltip: 'Supprimer',
+                                  ),
+                                ],
+                              ),
+                              onTap: () => _toggleForm(student: student),
+                            ),
+                          );
+                        },
+                      ),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: Colors.blue.shade900,
+        foregroundColor: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        elevation: 6,
+        onPressed: () => _toggleForm(),
+        child: Icon(showForm ? Icons.close : Icons.add, size: 28),
+        tooltip: showForm ? 'Fermer le formulaire' : 'Ajouter un étudiant',
+      ),
     );
+  }
+
+  @override
+  void dispose() {
+    _searchController.removeListener(_onSearchChanged);
+    _searchController.dispose();
+    _nomController.dispose();
+    _prenomController.dispose();
+    super.dispose();
   }
 }

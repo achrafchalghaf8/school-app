@@ -2,12 +2,14 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter_application_1/pages/admin_drawer.dart';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_file/open_file.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:universal_html/html.dart' as html;
+import 'package:intl/intl.dart';
 
 class Classe {
   final int id;
@@ -139,7 +141,7 @@ class _EmploisPageState extends State<EmploisPage> {
 
       if (response.statusCode == 201 || response.statusCode == 200) {
         _fetchEmplois();
-        _showSuccessSnackbar('Ajouté avec succès');
+        _showSuccessSnackbar('Emploi ajouté avec succès');
       } else {
         throw Exception('Erreur création emploi: ${response.statusCode} - ${response.body}');
       }
@@ -158,7 +160,7 @@ class _EmploisPageState extends State<EmploisPage> {
       
       if (response.statusCode == 200) {
         _fetchEmplois();
-        _showSuccessSnackbar('Modifié avec succès');
+        _showSuccessSnackbar('Emploi modifié avec succès');
       } else {
         throw Exception('Erreur mise à jour emploi: ${response.statusCode}');
       }
@@ -185,7 +187,11 @@ class _EmploisPageState extends State<EmploisPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Colors.red,
+        backgroundColor: Colors.red.shade400,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
         duration: const Duration(seconds: 3),
       ),
     );
@@ -195,7 +201,11 @@ class _EmploisPageState extends State<EmploisPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Colors.green,
+        backgroundColor: Colors.green.shade600,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
         duration: const Duration(seconds: 2),
       ),
     );
@@ -219,12 +229,14 @@ class _EmploisPageState extends State<EmploisPage> {
     return 'unknown';
   }
 
-  Future<void> _openFile(String base64String) async {
+  Future<void> _downloadAndOpenFile(String base64String, String fileName) async {
     try {
       final bytes = base64Decode(base64String);
       final fileType = _getFileTypeFromBytes(bytes);
       final extension = _getExtensionFromFileType(fileType);
-      final fileName = 'emploi_${DateTime.now().millisecondsSinceEpoch}.$extension';
+      final downloadFileName = fileName.isNotEmpty 
+          ? fileName 
+          : 'emploi_${DateTime.now().millisecondsSinceEpoch}.$extension';
 
       if (kIsWeb) {
         final mimeType = _getMimeType(fileType);
@@ -232,22 +244,18 @@ class _EmploisPageState extends State<EmploisPage> {
         final url = html.Url.createObjectUrlFromBlob(blob);
         
         final anchor = html.AnchorElement(href: url)
-          ..download = fileName
+          ..download = downloadFileName
           ..click();
         
         html.Url.revokeObjectUrl(url);
       } else {
         final tempDir = await getTemporaryDirectory();
-        final file = File('${tempDir.path}/$fileName');
+        final file = File('${tempDir.path}/$downloadFileName');
         await file.writeAsBytes(bytes);
-        final result = await OpenFile.open(file.path);
-        
-        if (result.type != ResultType.done) {
-          _showErrorSnackbar('Aucune application pour ouvrir ce fichier');
-        }
+        await OpenFile.open(file.path);
       }
     } catch (e) {
-      _showErrorSnackbar('Impossible d\'ouvrir le fichier: ${e.toString()}');
+      _showErrorSnackbar('Erreur lors du téléchargement: $e');
     }
   }
 
@@ -293,51 +301,74 @@ class _EmploisPageState extends State<EmploisPage> {
     }
   }
 
-  Widget _buildFilePreview(String base64String) {
-    if (base64String.isEmpty) {
-      return const ListTile(
-        leading: Icon(Icons.error, color: Colors.red),
-        title: Text('Aucun fichier disponible'),
-      );
-    }
-
+  Widget _buildFilePreview(String base64, {String fileName = ''}) {
     try {
-      final bytes = base64Decode(base64String);
+      final bytes = base64Decode(base64);
       final fileType = _getFileTypeFromBytes(bytes);
+      final fileSize = '${(bytes.length / (1024 * 1024)).toStringAsFixed(2)} MB';
+      final primaryColor = Colors.blue.shade900;
 
-      return Card(
-        elevation: 2,
+      return Container(
+        width: 180,
+        margin: const EdgeInsets.only(right: 12, bottom: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.2),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
         child: InkWell(
-          onTap: () => _openFile(base64String),
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => _downloadAndOpenFile(base64, fileName),
           child: Padding(
-            padding: const EdgeInsets.all(8.0),
+            padding: const EdgeInsets.all(12),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (fileType == 'png' || fileType == 'jpg' || fileType == 'gif')
-                  Image.memory(
-                    bytes,
-                    height: 150,
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, size: 50),
-                  )
-                else if (fileType == 'pdf')
-                  const Column(
-                    children: [
-                      Icon(Icons.picture_as_pdf, size: 50, color: Colors.red),
-                      Text('PDF - Cliquez pour ouvrir'),
-                    ],
-                  )
-                else
-                  const Column(
-                    children: [
-                      Icon(Icons.insert_drive_file, size: 50),
-                      Text('Fichier - Cliquez pour ouvrir'),
-                    ],
+                Container(
+                  height: 80,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: primaryColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
                   ),
+                  child: Center(
+                    child: _buildFileTypeIcon(fileType, bytes),
+                  ),
+                ),
                 const SizedBox(height: 8),
+                
                 Text(
-                  'Taille: ${(bytes.length / 1024).toStringAsFixed(1)} KB',
-                  style: Theme.of(context).textTheme.bodySmall,
+                  fileName.isNotEmpty ? fileName : 'Fichier',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      fileSize,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                    Icon(
+                      Icons.download_rounded,
+                      size: 16,
+                      color: primaryColor,
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -345,16 +376,50 @@ class _EmploisPageState extends State<EmploisPage> {
         ),
       );
     } catch (e) {
-      return const ListTile(
-        leading: Icon(Icons.error, color: Colors.red),
-        title: Text('Fichier corrompu ou invalide'),
+      return Container(
+        width: 180,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.red.shade100),
+        ),
+        child: Column(
+          children: [
+            Icon(Icons.error_outline, color: Colors.red.shade400, size: 40),
+            const SizedBox(height: 8),
+            const Text(
+              'Fichier invalide',
+              style: TextStyle(color: Colors.red),
+            ),
+          ],
+        ),
       );
     }
   }
 
-  Future<void> _showAddOrEditDialog({Emploi? emploi}) async {
+  Widget _buildFileTypeIcon(String fileType, Uint8List bytes) {
+    switch (fileType) {
+      case 'pdf':
+        return const Icon(Icons.picture_as_pdf, size: 40, color: Colors.red);
+      case 'png':
+      case 'jpg':
+      case 'gif':
+        return Image.memory(
+          bytes,
+          height: 80,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, size: 40),
+        );
+      default:
+        return const Icon(Icons.insert_drive_file, size: 40);
+    }
+  }
+
+  void _showAddOrEditDialog({Emploi? emploi}) async {
+    final primaryColor = Colors.blue.shade900;
     final dateCtl = TextEditingController(
-      text: emploi?.datePublication ?? DateTime.now().toString().substring(0, 10),
+      text: emploi?.datePublication ?? DateFormat('yyyy-MM-dd').format(DateTime.now()),
     );
     int? selectedClasseId = emploi?.classeId;
     String localBase64 = emploi?.fichier ?? '';
@@ -364,27 +429,53 @@ class _EmploisPageState extends State<EmploisPage> {
       context: context,
       builder: (context) {
         return StatefulBuilder(
-          builder: (context, dialogSetState) => AlertDialog(
-            title: Text(emploi == null ? 'Ajouter Emploi' : 'Modifier Emploi'),
-            content: SingleChildScrollView(
+          builder: (context, dialogSetState) => Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Text(
+                    emploi == null ? 'Ajouter un emploi' : 'Modifier l\'emploi',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: primaryColor,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  
                   TextField(
                     controller: dateCtl,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Date Publication',
-                      hintText: 'AAAA-MM-JJ',
+                      labelStyle: TextStyle(color: primaryColor),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: primaryColor),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: primaryColor, width: 2),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),
+                  
                   _loadingClasses
-                      ? const CircularProgressIndicator()
+                      ? const Center(child: CircularProgressIndicator())
                       : DropdownButtonFormField<int>(
                           value: selectedClasseId,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'Classe',
-                            border: OutlineInputBorder(),
+                            labelStyle: TextStyle(color: primaryColor),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
                           ),
                           items: _classes.map((classe) {
                             return DropdownMenuItem<int>(
@@ -405,80 +496,116 @@ class _EmploisPageState extends State<EmploisPage> {
                           },
                         ),
                   const SizedBox(height: 16),
-                  if (localBase64.isNotEmpty) _buildFilePreview(localBase64),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    onPressed: () async {
-                      final fileData = await _pickFile();
-                      if (fileData != null) {
-                        dialogSetState(() {
-                          localBase64 = fileData['base64']!;
-                          selectedFileName = fileData['fileName']!;
-                        });
-                      }
-                    },
-                    icon: const Icon(Icons.attach_file),
-                    label: Text(localBase64.isEmpty 
-                      ? 'Choisir un fichier (max 25MB)' 
-                      : 'Remplacer le fichier'),
-                  ),
-                  if (localBase64.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Text(
-                        selectedFileName,
-                        style: Theme.of(context).textTheme.bodySmall,
+                  
+                  if (localBase64.isNotEmpty) ...[
+                    Text(
+                      'FICHIER JOINT',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey.shade600,
+                        letterSpacing: 1,
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    _buildFilePreview(localBase64),
+                    const SizedBox(height: 16),
+                  ],
+                  
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.attach_file, size: 20, color: Colors.white),
+                      label: Text(
+                        localBase64.isEmpty 
+                          ? 'Choisir un fichier (max 25MB)' 
+                          : 'Remplacer le fichier',
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primaryColor,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      onPressed: () async {
+                        final fileData = await _pickFile();
+                        if (fileData != null) {
+                          dialogSetState(() {
+                            localBase64 = fileData['base64']!;
+                            selectedFileName = fileData['fileName']!;
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                        ),
+                        child: Text(
+                          'Annuler',
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      ElevatedButton(
+                        onPressed: () async {
+                          if (dateCtl.text.trim().isEmpty) {
+                            _showErrorSnackbar('Veuillez saisir une date');
+                            return;
+                          }
+
+                          if (selectedClasseId == null) {
+                            _showErrorSnackbar('Veuillez sélectionner une classe');
+                            return;
+                          }
+
+                          if (localBase64.isEmpty) {
+                            _showErrorSnackbar('Veuillez sélectionner un fichier');
+                            return;
+                          }
+
+                          final payload = {
+                            'datePublication': dateCtl.text.trim(),
+                            'classeId': selectedClasseId,
+                            'fichier': localBase64,
+                          };
+
+                          try {
+                            if (emploi == null) {
+                              await _createEmploi(payload);
+                            } else {
+                              await _updateEmploi(emploi.id, payload);
+                            }
+                            if (mounted) Navigator.pop(context);
+                          } catch (e) {
+                            _showErrorSnackbar('Erreur: ${e.toString()}');
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryColor,
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                        ),
+                        child: const Text(
+                          'Enregistrer',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Annuler'),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  if (dateCtl.text.trim().isEmpty) {
-                    _showErrorSnackbar('Veuillez saisir une date');
-                    return;
-                  }
-
-                  if (selectedClasseId == null) {
-                    _showErrorSnackbar('Veuillez sélectionner une classe');
-                    return;
-                  }
-
-                  if (localBase64.isEmpty) {
-                    _showErrorSnackbar('Veuillez sélectionner un fichier');
-                    return;
-                  }
-
-                  final payload = {
-                    'datePublication': dateCtl.text.trim(),
-                    'classeId': selectedClasseId,
-                    'fichier': localBase64,
-                  };
-
-                  try {
-                    if (emploi == null) {
-                      await _createEmploi(payload);
-                    } else {
-                      await _updateEmploi(emploi.id, payload);
-                    }
-                    if (mounted) {
-                      Navigator.pop(context);
-                    }
-                  } catch (e) {
-                    if (mounted) {
-                      _showErrorSnackbar('Erreur: ${e.toString()}');
-                    }
-                  }
-                },
-                child: Text(emploi == null ? 'Ajouter' : 'Enregistrer'),
-              ),
-            ],
           ),
         );
       },
@@ -487,100 +614,276 @@ class _EmploisPageState extends State<EmploisPage> {
 
   @override
   Widget build(BuildContext context) {
+    final primaryColor = Colors.blue.shade900;
+    final backgroundColor = Colors.grey.shade50;
+
     return Scaffold(
+      backgroundColor: backgroundColor,
       appBar: AppBar(
-        title: const Text('Emplois du Temps'),
+        title: const Text('Gestion des Emplois', style: TextStyle(color: Colors.white)),
+        centerTitle: true,
+        backgroundColor: primaryColor,
+        elevation: 4,
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu, color: Colors.white),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: _fetchData,
+            tooltip: 'Actualiser',
           ),
         ],
       ),
+      drawer: const AdminDrawer(),
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: primaryColor,
+        foregroundColor: Colors.white,
+        elevation: 4,
+        onPressed: () => _showAddOrEditDialog(),
+        child: const Icon(Icons.add),
+      ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+              ),
+            )
           : _emplois.isEmpty
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text('Aucun emploi du temps disponible'),
+                      Icon(
+                        Icons.calendar_today,
+                        size: 60,
+                        color: Colors.grey.shade400,
+                      ),
                       const SizedBox(height: 16),
+                      Text(
+                        'Aucun emploi disponible',
+                        style: TextStyle(
+                          fontSize: 18,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
                       ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryColor,
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
                         onPressed: _fetchData,
-                        child: const Text('Actualiser'),
+                        child: const Text('Actualiser', style: TextStyle(color: Colors.white)),
                       ),
                     ],
                   ),
                 )
-              : ListView.builder(
-                  itemCount: _emplois.length,
-                  itemBuilder: (context, index) {
-                    final emploi = _emplois[index];
-                    final classe = _classes.firstWhere(
-                      (c) => c.id == emploi.classeId,
-                      orElse: () => Classe(id: 0, niveau: 'Inconnue', enseignantIds: []),
-                    );
-
-                    return Card(
-                      margin: const EdgeInsets.all(8),
-                      child: Column(
-                        children: [
-                          ListTile(
-                            leading: CircleAvatar(
-                              child: Text('#${emploi.id}'),
-                            ),
-                            title: Text('Classe: ${classe.niveau}'),
-                            subtitle: Text('Date: ${emploi.datePublication}'),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(Icons.edit),
-                                  onPressed: () => _showAddOrEditDialog(emploi: emploi),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete),
-                                  onPressed: () => _confirmDelete(emploi.id),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: _buildFilePreview(emploi.fichier),
-                          ),
-                        ],
+              : ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    Text(
+                      'Liste des emplois du temps',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: primaryColor,
                       ),
-                    );
-                  },
+                    ),
+                    const SizedBox(height: 16),
+                    ..._emplois.map((emploi) {
+                      final classe = _classes.firstWhere(
+                        (c) => c.id == emploi.classeId,
+                        orElse: () => Classe(id: 0, niveau: 'Inconnue', enseignantIds: []),
+                      );
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.grey.withOpacity(0.1),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: primaryColor.withOpacity(0.1),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Text(
+                                      '#${emploi.id}',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: primaryColor,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          classe.niveau,
+                                          style: TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                            color: primaryColor,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.calendar_today,
+                                              size: 14,
+                                              color: Colors.grey.shade600,
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              DateFormat('dd/MM/yyyy').format(
+                                                DateTime.parse(emploi.datePublication),
+                                              ),
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey.shade600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: Icon(
+                                      Icons.edit,
+                                      color: Colors.blue.shade700,
+                                    ),
+                                    onPressed: () => _showAddOrEditDialog(emploi: emploi),
+                                  ),
+                                  IconButton(
+                                    icon: Icon(
+                                      Icons.delete,
+                                      color: Colors.red.shade400,
+                                    ),
+                                    onPressed: () => _confirmDelete(emploi.id),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (emploi.fichier.isNotEmpty) ...[
+                              const SizedBox(height: 16),
+                              const Divider(height: 1),
+                              Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        'FICHIER JOINT',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.grey.shade600,
+                                          letterSpacing: 1,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      _buildFilePreview(emploi.fichier),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ],
                 ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddOrEditDialog(),
-        child: const Icon(Icons.add),
-      ),
     );
   }
 
   void _confirmDelete(int id) {
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Confirmer la suppression'),
-        content: const Text('Voulez-vous vraiment supprimer cet emploi du temps ?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Annuler'),
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Confirmer la suppression',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue.shade900,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text('Voulez-vous vraiment supprimer cet emploi du temps ?'),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                    ),
+                    child: Text(
+                      'Annuler',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _deleteEmploi(id);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade400,
+                    ),
+                    child: const Text(
+                      'Supprimer',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _deleteEmploi(id);
-            },
-            child: const Text('Supprimer', style: TextStyle(color: Colors.red)),
-          ),
-        ],
+        ),
       ),
     );
   }

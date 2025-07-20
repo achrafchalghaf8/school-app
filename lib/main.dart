@@ -38,6 +38,7 @@ class MyApp extends StatelessWidget {
   final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
   return WelcomeTeacherPage(userId: args['userId'], token: args['token']);
 },
+
           '/admin/administrators': (context) => const AdministratorsPage(),
             '/admin/teachers': (context) => const TeachersPage(),
               '/admin/parents': (context) => const ParentsPage(),
@@ -46,6 +47,7 @@ class MyApp extends StatelessWidget {
                '/admin/schedule': (context) => EmploisPage(),
                '/admin/exercises': (context) => const ExercicesPage(),
                '/admin/courses': (context) => const CoursPage(),
+               '/admin/dashboard': (context) => const WelcomeAdminPage(),
 
 
           

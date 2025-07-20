@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter_application_1/pages/admin_drawer.dart';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -50,6 +51,7 @@ class CoursPage extends StatefulWidget {
 class _CoursPageState extends State<CoursPage> {
   static const String _coursApiUrl = 'http://localhost:8004/api/cours';
   static const int _maxFileSize = 25 * 1024 * 1024;
+  static const String _fileSeparator = '||SEP||XyZ1234||SEP||';
 
   final List<Cours> _cours = [];
   bool _loading = true;
@@ -65,20 +67,20 @@ class _CoursPageState extends State<CoursPage> {
     try {
       final response = await http.get(Uri.parse(_coursApiUrl));
       if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body) as List<dynamic>;
+        final List<dynamic> data = jsonDecode(response.body);
         setState(() {
           _cours
             ..clear()
-            ..addAll(data.map((e) => Cours.fromJson(e as Map<String, dynamic>)));
+            ..addAll(data.map((e) => Cours.fromJson(e)));
           _loading = false;
         });
       } else {
         setState(() => _loading = false);
-        _showErrorSnackbar('Erreur lors de la récupération des cours: ${response.statusCode}');
+        _showErrorSnackbar('Erreur de chargement: ${response.statusCode}');
       }
     } catch (e) {
       setState(() => _loading = false);
-      _showErrorSnackbar('Erreur réseau ou serveur: ${e.toString()}');
+      _showErrorSnackbar('Erreur: $e');
     }
   }
 
@@ -89,15 +91,14 @@ class _CoursPageState extends State<CoursPage> {
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(body),
       );
-
       if (response.statusCode == 201 || response.statusCode == 200) {
         _fetchCours();
-        _showSuccessSnackbar('Cours ajouté avec succès');
+        _showSuccessSnackbar('Cours ajouté');
       } else {
-        throw Exception('Erreur création cours: ${response.statusCode} - ${response.body}');
+        throw Exception('Erreur: ${response.statusCode}');
       }
     } catch (e) {
-      _showErrorSnackbar('Erreur lors de la création: ${e.toString()}');
+      _showErrorSnackbar('Erreur: $e');
     }
   }
 
@@ -108,15 +109,14 @@ class _CoursPageState extends State<CoursPage> {
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode(body),
       );
-      
       if (response.statusCode == 200) {
         _fetchCours();
-        _showSuccessSnackbar('Cours modifié avec succès');
+        _showSuccessSnackbar('Cours modifié');
       } else {
-        throw Exception('Erreur mise à jour cours: ${response.statusCode}');
+        throw Exception('Erreur: ${response.statusCode}');
       }
     } catch (e) {
-      _showErrorSnackbar('Erreur lors de la mise à jour: ${e.toString()}');
+      _showErrorSnackbar('Erreur: $e');
     }
   }
 
@@ -125,33 +125,13 @@ class _CoursPageState extends State<CoursPage> {
       final response = await http.delete(Uri.parse('$_coursApiUrl/$id'));
       if (response.statusCode == 200 || response.statusCode == 204) {
         _fetchCours();
-        _showSuccessSnackbar('Suppression réussie');
+        _showSuccessSnackbar('Cours supprimé');
       } else {
-        throw Exception('Erreur suppression: ${response.statusCode}');
+        throw Exception('Erreur: ${response.statusCode}');
       }
     } catch (e) {
-      _showErrorSnackbar('Erreur lors de la suppression: ${e.toString()}');
+      _showErrorSnackbar('Erreur: $e');
     }
-  }
-
-  void _showErrorSnackbar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-        duration: const Duration(seconds: 3),
-      ),
-    );
-  }
-
-  void _showSuccessSnackbar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.green,
-        duration: const Duration(seconds: 2),
-      ),
-    );
   }
 
   String _getFileTypeFromBytes(Uint8List bytes) {
@@ -172,12 +152,14 @@ class _CoursPageState extends State<CoursPage> {
     return 'unknown';
   }
 
-  Future<void> _openFile(String base64String) async {
+  Future<void> _downloadAndOpenFile(String base64String, String fileName) async {
     try {
       final bytes = base64Decode(base64String);
       final fileType = _getFileTypeFromBytes(bytes);
       final extension = _getExtensionFromFileType(fileType);
-      final fileName = 'cours_${DateTime.now().millisecondsSinceEpoch}.$extension';
+      final downloadFileName = fileName.isNotEmpty 
+          ? fileName 
+          : 'cours_${DateTime.now().millisecondsSinceEpoch}.$extension';
 
       if (kIsWeb) {
         final mimeType = _getMimeType(fileType);
@@ -185,22 +167,18 @@ class _CoursPageState extends State<CoursPage> {
         final url = html.Url.createObjectUrlFromBlob(blob);
         
         final anchor = html.AnchorElement(href: url)
-          ..download = fileName
+          ..download = downloadFileName
           ..click();
         
         html.Url.revokeObjectUrl(url);
       } else {
         final tempDir = await getTemporaryDirectory();
-        final file = File('${tempDir.path}/$fileName');
+        final file = File('${tempDir.path}/$downloadFileName');
         await file.writeAsBytes(bytes);
-        final result = await OpenFile.open(file.path);
-        
-        if (result.type != ResultType.done) {
-          _showErrorSnackbar('Aucune application pour ouvrir ce fichier');
-        }
+        await OpenFile.open(file.path);
       }
     } catch (e) {
-      _showErrorSnackbar('Impossible d\'ouvrir le fichier: ${e.toString()}');
+      _showErrorSnackbar('Erreur lors du téléchargement: $e');
     }
   }
 
@@ -220,77 +198,99 @@ class _CoursPageState extends State<CoursPage> {
          : 'application/octet-stream';
   }
 
-  Future<Map<String, dynamic>?> _pickFile() async {
+  Future<List<Map<String, dynamic>>?> _pickMultipleFiles() async {
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'gif'],
+        allowMultiple: true,
       );
-      
-      if (result == null || result.files.single.bytes == null) return null;
+      if (result == null || result.files.isEmpty) return null;
 
-      final file = result.files.single;
-      
-      if (file.size > _maxFileSize) {
-        _showErrorSnackbar('Fichier trop volumineux (max ${_maxFileSize ~/ 1024 ~/ 1024}MB)');
-        return null;
-      }
-
-      return {
-        'fileName': file.name,
-        'base64': base64Encode(file.bytes!),
-      };
+      return result.files
+          .where((file) => file.bytes != null && file.size <= _maxFileSize)
+          .map((file) => {
+                'fileName': file.name,
+                'base64': base64Encode(file.bytes!),
+              })
+          .toList();
     } catch (e) {
-      _showErrorSnackbar('Erreur lors de la sélection du fichier: ${e.toString()}');
+      _showErrorSnackbar('Erreur: $e');
       return null;
     }
   }
 
-  Widget _buildFilePreview(String base64String) {
-    if (base64String.isEmpty || base64String == 'hhhh') {
-      return const ListTile(
-        leading: Icon(Icons.error, color: Colors.red),
-        title: Text('Aucun fichier disponible'),
-      );
-    }
-
+  Widget _buildFilePreview(String base64, {String fileName = ''}) {
     try {
-      final bytes = base64Decode(base64String);
+      final bytes = base64Decode(base64);
       final fileType = _getFileTypeFromBytes(bytes);
+      final fileSize = '${(bytes.length / 1024).toStringAsFixed(1)} KB';
+      final primaryColor = Colors.blue.shade900;
 
-      return Card(
-        elevation: 2,
+      return Container(
+        width: 180,
+        margin: const EdgeInsets.only(right: 12, bottom: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.2),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
         child: InkWell(
-          onTap: () => _openFile(base64String),
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => _downloadAndOpenFile(base64, fileName),
           child: Padding(
-            padding: const EdgeInsets.all(8.0),
+            padding: const EdgeInsets.all(12),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (fileType == 'png' || fileType == 'jpg' || fileType == 'gif')
-                  Image.memory(
-                    bytes,
-                    height: 150,
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, size: 50),
-                  )
-                else if (fileType == 'pdf')
-                  const Column(
-                    children: [
-                      Icon(Icons.picture_as_pdf, size: 50, color: Colors.red),
-                      Text('PDF - Cliquez pour ouvrir'),
-                    ],
-                  )
-                else
-                  const Column(
-                    children: [
-                      Icon(Icons.insert_drive_file, size: 50),
-                      Text('Fichier - Cliquez pour ouvrir'),
-                    ],
+                // File type icon
+                Container(
+                  height: 80,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: primaryColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
                   ),
+                  child: Center(
+                    child: _buildFileTypeIcon(fileType, bytes),
+                  ),
+                ),
                 const SizedBox(height: 8),
+                
+                // File name
                 Text(
-                  'Taille: ${(bytes.length / 1024).toStringAsFixed(1)} KB',
-                  style: Theme.of(context).textTheme.bodySmall,
+                  fileName.isNotEmpty ? fileName : 'Fichier',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                
+                // File size and download
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      fileSize,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                    Icon(
+                      Icons.download_rounded,
+                      size: 16,
+                      color: primaryColor,
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -298,203 +298,542 @@ class _CoursPageState extends State<CoursPage> {
         ),
       );
     } catch (e) {
-      return const ListTile(
-        leading: Icon(Icons.error, color: Colors.red),
-        title: Text('Fichier corrompu ou invalide'),
+      return Container(
+        width: 180,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.red.shade100),
+        ),
+        child: Column(
+          children: [
+            Icon(Icons.error_outline, color: Colors.red.shade400, size: 40),
+            const SizedBox(height: 8),
+            const Text(
+              'Fichier invalide',
+              style: TextStyle(color: Colors.red),
+            ),
+          ],
+        ),
       );
     }
   }
 
-  Future<void> _showAddOrEditDialog({Cours? cours}) async {
+  Widget _buildFileTypeIcon(String fileType, Uint8List bytes) {
+    switch (fileType) {
+      case 'pdf':
+        return const Icon(Icons.picture_as_pdf, size: 40, color: Colors.red);
+      case 'png':
+      case 'jpg':
+      case 'gif':
+        return Image.memory(
+          bytes,
+          height: 80,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, size: 40),
+        );
+      default:
+        return const Icon(Icons.insert_drive_file, size: 40);
+    }
+  }
+
+  Widget _buildFileItemWithDelete(Map<String, dynamic> file, VoidCallback onDelete) {
+    return Stack(
+      children: [
+        _buildFilePreview(file['base64'], fileName: file['fileName']),
+        Positioned(
+          top: 8,
+          right: 8,
+          child: GestureDetector(
+            onTap: onDelete,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.red.shade400,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.close,
+                color: Colors.white,
+                size: 16,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showAddOrEditDialog({Cours? cours}) async {
+    final primaryColor = Colors.blue.shade900;
     final matiereCtl = TextEditingController(text: cours?.matiere ?? '');
-    String localBase64 = cours?.fichier ?? '';
-    String selectedFileName = localBase64.isEmpty ? '' : 'Fichier sélectionné';
+    List<Map<String, dynamic>> selectedFiles = [];
+
+    if (cours != null && cours.fichier.isNotEmpty) {
+      selectedFiles = cours.fichier
+          .split(_fileSeparator)
+          .map((b64) => {'fileName': 'Fichier cours', 'base64': b64})
+          .toList();
+    }
 
     await showDialog(
       context: context,
       builder: (context) {
         return StatefulBuilder(
-          builder: (context, dialogSetState) => AlertDialog(
-            title: Text(cours == null ? 'Ajouter Cours' : 'Modifier Cours'),
-            content: SingleChildScrollView(
+          builder: (context, dialogSetState) => Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Text(
+                    cours == null ? 'Ajouter un cours' : 'Modifier le cours',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: primaryColor,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  
                   TextField(
                     controller: matiereCtl,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Matière',
-                      hintText: 'Nom de la matière',
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  if (localBase64.isNotEmpty) _buildFilePreview(localBase64),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    onPressed: () async {
-                      final fileData = await _pickFile();
-                      if (fileData != null) {
-                        dialogSetState(() {
-                          localBase64 = fileData['base64']!;
-                          selectedFileName = fileData['fileName']!;
-                        });
-                      }
-                    },
-                    icon: const Icon(Icons.attach_file),
-                    label: Text(localBase64.isEmpty 
-                      ? 'Choisir un fichier (max 25MB)' 
-                      : 'Remplacer le fichier'),
-                  ),
-                  if (localBase64.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Text(
-                        selectedFileName,
-                        style: Theme.of(context).textTheme.bodySmall,
+                      labelStyle: TextStyle(color: primaryColor),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: primaryColor),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: primaryColor, width: 2),
                       ),
                     ),
+                  ),
+                  const SizedBox(height: 20),
+                  
+                  if (selectedFiles.isNotEmpty) ...[
+                    Text(
+                      'Fichiers joints',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: selectedFiles.asMap().entries.map((entry) {
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 12),
+                            child: _buildFileItemWithDelete(
+                              entry.value,
+                              () => dialogSetState(() => selectedFiles.removeAt(entry.key)),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                  
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.attach_file, size: 20),
+                        label: const Text('Ajouter des fichiers', style: TextStyle(
+        color: Colors.white,
+      ),),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primaryColor,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      onPressed: () async {
+                        final files = await _pickMultipleFiles();
+                        if (files != null) {
+                          dialogSetState(() => selectedFiles.addAll(files));
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                        ),
+                        child: Text(
+                          'Annuler',
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      ElevatedButton(
+                        onPressed: () async {
+                          if (matiereCtl.text.trim().isEmpty) {
+                            _showErrorSnackbar('Veuillez saisir une matière');
+                            return;
+                          }
+
+                          final payload = {
+                            'matiere': matiereCtl.text.trim(),
+                            'fichier': selectedFiles.map((f) => f['base64']).join(_fileSeparator),
+                            'exerciceIds': cours?.exerciceIds ?? [],
+                          };
+
+                          try {
+                            if (cours == null) {
+                              await _createCours(payload);
+                            } else {
+                              await _updateCours(cours.id, payload);
+                            }
+                            if (mounted) Navigator.pop(context);
+                          } catch (e) {
+                            _showErrorSnackbar('Erreur: $e');
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryColor,
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                        ),
+                      child: const Text(
+    'Enregistrer',
+    style: TextStyle(
+      color: Colors.white, 
+    ),),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Annuler'),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  if (matiereCtl.text.trim().isEmpty) {
-                    _showErrorSnackbar('Veuillez saisir une matière');
-                    return;
-                  }
-
-                  if (localBase64.isEmpty) {
-                    _showErrorSnackbar('Veuillez sélectionner un fichier');
-                    return;
-                  }
-
-                  final payload = {
-                    'matiere': matiereCtl.text.trim(),
-                    'fichier': localBase64,
-                    'exerciceIds': cours?.exerciceIds ?? [],
-                  };
-
-                  try {
-                    if (cours == null) {
-                      await _createCours(payload);
-                    } else {
-                      await _updateCours(cours.id, payload);
-                    }
-                    if (mounted) {
-                      Navigator.pop(context);
-                    }
-                  } catch (e) {
-                    if (mounted) {
-                      _showErrorSnackbar('Erreur: ${e.toString()}');
-                    }
-                  }
-                },
-                child: Text(cours == null ? 'Ajouter' : 'Enregistrer'),
-              ),
-            ],
           ),
         );
       },
     );
   }
 
-  @override
+  void _confirmDelete(int id) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Confirmer la suppression',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue.shade900,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text('Voulez-vous vraiment supprimer ce cours ?'),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: Text(
+                      'Annuler',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _deleteCours(id);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade400,
+                    ),
+                    child: const Text('Supprimer'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showErrorSnackbar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red.shade400,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  void _showSuccessSnackbar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green.shade600,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+ @override
   Widget build(BuildContext context) {
+    final primaryColor = Colors.blue.shade900;
+    final backgroundColor = Colors.grey.shade50;
+
     return Scaffold(
+      backgroundColor: backgroundColor,
       appBar: AppBar(
-        title: const Text('Gestion des Cours'),
+        title: const Text('Gestion des Cours', style: TextStyle(color: Colors.white)),
+        centerTitle: true,
+        backgroundColor: primaryColor,
+        elevation: 4,
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu, color: Color.fromARGB(255, 0, 0, 0)),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: _fetchCours,
+            tooltip: 'Actualiser',
           ),
         ],
       ),
+      drawer: const AdminDrawer(), // Votre drawer admin
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: primaryColor,
+        foregroundColor: Colors.white,
+        elevation: 4,
+        onPressed: () => _showAddOrEditDialog(),
+        child: const Icon(Icons.add),
+      ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+              ),
+            )
           : _cours.isEmpty
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text('Aucun cours disponible'),
+                      Icon(
+                        Icons.collections_bookmark,
+                        size: 60,
+                        color: Colors.grey.shade400,
+                      ),
                       const SizedBox(height: 16),
+                      Text(
+                        'Aucun cours disponible',
+                        style: TextStyle(
+                          fontSize: 18,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
                       ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryColor,
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
                         onPressed: _fetchCours,
-                        child: const Text('Actualiser'),
+                        child: const Text('Actualiser', style: TextStyle(color: Colors.white)),
                       ),
                     ],
                   ),
                 )
-              : ListView.builder(
-                  itemCount: _cours.length,
-                  itemBuilder: (context, index) {
-                    final cours = _cours[index];
-                    return Card(
-                      margin: const EdgeInsets.all(8),
-                      child: Column(
-                        children: [
-                          ListTile(
-                            leading: CircleAvatar(
-                              child: Text('#${cours.id}'),
-                            ),
-                            title: Text('Matière: ${cours.matiere}'),
-                            subtitle: Text('${cours.exerciceIds.length} exercices associés'),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(Icons.edit),
-                                  onPressed: () => _showAddOrEditDialog(cours: cours),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete),
-                                  onPressed: () => _confirmDelete(cours.id),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: _buildFilePreview(cours.fichier),
-                          ),
-                        ],
+              : ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    Text(
+                      'Liste des cours',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: primaryColor,
                       ),
-                    );
-                  },
+                    ),
+                    const SizedBox(height: 16),
+                    ..._cours.map((cours) {
+                      final fileParts = cours.fichier.split(_fileSeparator);
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.grey.withOpacity(0.1),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: primaryColor.withOpacity(0.1),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Text(
+                                      '#${cours.id}',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: primaryColor,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          cours.matiere,
+                                          style: TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                            color: primaryColor,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Row(
+                                          children: [
+                                            Icon(
+                                              Icons.assignment,
+                                              size: 14,
+                                              color: Colors.grey.shade600,
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              '${cours.exerciceIds.length} exercices',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey.shade600,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Icon(
+                                              Icons.attach_file,
+                                              size: 14,
+                                              color: Colors.grey.shade600,
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              '${fileParts.length} fichiers',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey.shade600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: Icon(
+                                      Icons.edit,
+                                      color: Colors.blue.shade700,
+                                    ),
+                                    onPressed: () => _showAddOrEditDialog(cours: cours),
+                                  ),
+                                  IconButton(
+                                    icon: Icon(
+                                      Icons.delete,
+                                      color: Colors.red.shade400,
+                                    ),
+                                    onPressed: () => _confirmDelete(cours.id),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (fileParts.isNotEmpty) ...[
+                              const Divider(height: 1),
+                              Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'FICHIERS ASSOCIÉS',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.grey.shade600,
+                                        letterSpacing: 1,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    SingleChildScrollView(
+                                      scrollDirection: Axis.horizontal,
+                                      child: Row(
+                                        children: fileParts
+                                            .map((base64) => _buildFilePreview(base64))
+                                            .toList(),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ],
                 ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddOrEditDialog(),
-        child: const Icon(Icons.add),
-      ),
-    );
-  }
-
-  void _confirmDelete(int id) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Confirmer la suppression'),
-        content: const Text('Voulez-vous vraiment supprimer ce cours ?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Annuler'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _deleteCours(id);
-            },
-            child: const Text('Supprimer', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
     );
   }
 }
